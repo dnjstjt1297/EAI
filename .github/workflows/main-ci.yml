@@ -1,0 +1,73 @@
+name: Main Branch Build & Test CI
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ===== 운영 환경용 config.properties 생성 =====
+      - name: Create Production config.properties
+        run: |
+          mkdir -p src/main/resources src/test/resources
+          
+          cat <<EOF > src/main/resources/config.properties
+          applicant.key=${{ secrets.APPLICANT_KEY }}
+          db.driver=${{ secrets.DB_DRIVER }}
+          db.url=${{ secrets.DB_URL }}
+          db.user=${{ secrets.DB_USER }}
+          db.password=${{ secrets.DB_PASSWORD }}
+          sftp.host=${{ secrets.SFTP_HOST }}
+          sftp.port=${{ secrets.SFTP_PORT }}
+          sftp.username=${{ secrets.SFTP_USERNAME }}
+          sftp.password=${{ secrets.SFTP_PASSWORD }}
+          sftp.filepath=${{ secrets.SFTP_FILENAME }}
+          EOF
+
+          # 테스트용 설정도 동일하게 생성 (빌드 시 테스트 수행용)
+          cat <<EOF > src/test/resources/config.properties
+          applicant.key=${{ secrets.T_APPLICANT_KEY }}
+          db.driver=${{ secrets.T_DB_DRIVER }}
+          db.url=${{ secrets.T_DB_URL }}
+          db.user=${{ secrets.T_DB_USER }}
+          db.password=${{ secrets.T_DB_PASSWORD }}
+          sftp.host=${{ secrets.T_SFTP_HOST }}
+          sftp.port=${{ secrets.T_SFTP_PORT }}
+          sftp.username=${{ secrets.T_SFTP_USERNAME }}
+          sftp.password=${{ secrets.T_SFTP_PASSWORD }}
+          sftp.filepath=${{ secrets.T_SFTP_FILENAME }}
+          EOF
+
+      - name: Compile
+        run: |
+          mkdir -p out
+          javac -encoding UTF-8 -cp "lib/*" -d out \
+            $(find src/main/java src/test/java -name "*.java")
+
+      - name: Run Final Tests
+        run: |
+          java -jar lib/junit-platform-console-standalone-1.8.1.jar \
+            -cp out:lib/* \
+            --scan-classpath > test_result.log 2>&1
+
+      - name: Upload Test Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-test-log
+          path: test_result.log
