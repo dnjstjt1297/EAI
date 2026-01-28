@@ -1,4 +1,4 @@
-name: PR CI & Gemini Comment
+name: PR CI
 
 on:
   pull_request:
