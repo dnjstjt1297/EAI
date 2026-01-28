@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
+      - '**'
 
 permissions:
   pull-requests: write
@@ -16,7 +17,6 @@ jobs:
 
     env:
       JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
-      JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
     steps:
@@ -88,10 +88,8 @@ jobs:
             git fetch origin "${{ github.event.pull_request.base.ref }}"
             git fetch origin "${{ github.event.pull_request.head.ref }}"
             git diff --unified=0 "origin/${{ github.event.pull_request.base.ref }}"..."origin/${{ github.event.pull_request.head.ref }}" > diff.txt
-            echo "EVENT_TYPE=pull_request" >> $GITHUB_ENV
           else
             git diff --unified=0 HEAD^ HEAD > diff.txt
-            echo "EVENT_TYPE=push" >> $GITHUB_ENV
           fi
 
       # ===== 7. Run Gemini Review =====
@@ -102,13 +100,15 @@ jobs:
           script: |
             const fs = require("fs");
             const { GoogleGenerativeAI } = require("@google/generative-ai");
+
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // 최신 모델
 
             const diff = fs.readFileSync("diff.txt", "utf8");
 
             let prompt = "";
-            if (process.env.EVENT_TYPE === "pull_request") {
+
+            if (process.env.GITHUB_EVENT_NAME === "pull_request") {
               prompt = `
               Explain in Korean. You are a senior software engineer performing line-by-line code review on the given git diff.
               Identify issues in code quality, readability, performance, and security.
@@ -127,19 +127,22 @@ jobs:
             const result = await model.generateContent(prompt);
             const response = await result.response;
             const text = response.text();
+
             fs.writeFileSync("review_result.txt", text);
             console.log("Review results saved!");
 
       # ===== 8. Add PR Comments =====
       - name: Format PR Review Comments
-        if: env.EVENT_TYPE == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' }}
         id: store
         run: |
-          COMMENT=$(jq -c '.' review_result.txt)
+          echo "Validating review_result.txt..."
+          jq -c '.' review_result.txt > review_result_valid.json
+          COMMENT=$(cat review_result_valid.json)
           echo "comment=$COMMENT" >> $GITHUB_OUTPUT
 
       - name: Add Pull Request Review Comment
-        if: env.EVENT_TYPE == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' }}
         uses: nbaztec/add-pr-review-comment@v1.0.7
         with:
           comments: ${{ steps.store.outputs.comment }}
@@ -149,14 +152,14 @@ jobs:
 
       # ===== 9. Push 이벤트 리뷰 출력 =====
       - name: Display review results
-        if: env.EVENT_TYPE == 'push'
+        if: ${{ github.event_name == 'push' }}
         run: |
           echo "===== Gemini Code Review Results ====="
           cat review_result.txt
           echo "======================================"
 
       - name: Upload review results artifact
-        if: env.EVENT_TYPE == 'push'
+        if: ${{ github.event_name == 'push' }}
         uses: actions/upload-artifact@v4
         with:
           name: gemini-code-review
