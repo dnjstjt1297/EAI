@@ -1,119 +1,152 @@
-name: PR CI & Diff Review
+name: PR CI & Gemini Comment
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master] # Push 이벤트도 대응하려면 브랜치 지정 필요
 
 permissions:
-  contents: read
   pull-requests: write
+  contents: read
 
 jobs:
   pr-ci:
     runs-on: ubuntu-latest
 
     steps:
-      ################################
-      # 1. 소스 체크아웃
-      ################################
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      ################################
-      # 2. JDK 17 세팅
-      ################################
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          java-version: '17'
+          distribution: 'temurin'
 
-      ################################
-      # 3. 빌드 & 테스트 (예시)
-      ################################
-      - name: Build & Test
+      # ===== 프로젝트 설정 파일 생성 =====
+      - name: Create config.properties
         run: |
-          echo "빌드/테스트 시작"
-          # 예시 (필요한 명령으로 교체)
-          # javac Main.java
-          echo "빌드/테스트 완료"
+          mkdir -p src/main/resources src/test/resources
+          cat <<EOF > src/main/resources/config.properties
+          applicant.key=${{ secrets.APPLICANT_KEY }}
+          db.driver=${{ secrets.DB_DRIVER }}
+          db.url=${{ secrets.DB_URL }}
+          db.user=${{ secrets.DB_USER }}
+          db.password=${{ secrets.DB_PASSWORD }}
+          sftp.host=${{ secrets.SFTP_HOST }}
+          sftp.port=${{ secrets.SFTP_PORT }}
+          sftp.username=${{ secrets.SFTP_USERNAME }}
+          sftp.password=${{ secrets.SFTP_PASSWORD }}
+          sftp.filepath=${{ secrets.SFTP_FILENAME }}
+          EOF
 
-      ################################
-      # 4. PR diff 가져오기 (현재 브랜치 변경분만)
-      ################################
-      - name: Get PR diff
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          cat <<EOF > src/test/resources/config.properties
+          applicant.key=${{ secrets.T_APPLICANT_KEY }}
+          db.driver=${{ secrets.T_DB_DRIVER }}
+          db.url=${{ secrets.T_DB_URL }}
+          db.user=${{ secrets.T_DB_USER }}
+          db.password=${{ secrets.T_DB_PASSWORD }}
+          sftp.host=${{ secrets.T_SFTP_HOST }}
+          sftp.port=${{ secrets.T_SFTP_PORT }}
+          sftp.username=${{ secrets.T_SFTP_USERNAME }}
+          sftp.password=${{ secrets.T_SFTP_PASSWORD }}
+          sftp.filepath=${{ secrets.T_SFTP_FILENAME }}
+          EOF
+
+      # ===== 컴파일 및 테스트 =====
+      - name: Compile
         run: |
-          echo "PR diff 다운로드 중..."
+          mkdir -p out
+          javac -encoding UTF-8 -cp "lib/*" -d out \
+            $(find src/main/java src/test/java -name "*.java")
 
-          curl -sL \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3.diff" \
-            "${{ github.event.pull_request.diff_url }}" \
-            > pr.diff
-
-          if [ ! -s pr.diff ]; then
-            echo "⚠️ diff가 비어있음"
-            echo "NO_DIFF=true" >> $GITHUB_ENV
-          else
-            echo "diff 크기:"
-            wc -l pr.diff
-            echo "NO_DIFF=false" >> $GITHUB_ENV
-          fi
-
-      ################################
-      # 5. Gemini / LLM 리뷰 (diff 기준)
-      ################################
-      - name: Generate PR Review
-        if: env.NO_DIFF == 'false'
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - name: Run tests
+        id: test
         run: |
-          DIFF_CONTENT=$(sed 's/"/\\"/g' pr.diff | sed ':a;N;$!ba;s/\n/\\n/g')
+          set +e
+          java -jar lib/junit-platform-console-standalone-1.8.1.jar \
+            -cp out:lib/* \
+            --scan-classpath > test.log 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
 
-          echo "LLM 호출 중..."
+      # ===== Gemini AI 분석 =====
+      - name: Install Gemini AI
+        run: npm install @google/generative-ai
 
-          RESPONSE=$(curl -s https://YOUR_GEMINI_ENDPOINT \
-            -H "Authorization: Bearer $GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"prompt\": \"Review the following git diff and give concise, actionable feedback:\\n$DIFF_CONTENT\"
-            }")
-
-          if [ -z "$RESPONSE" ] || [ "$RESPONSE" = "null" ]; then
-            REVIEW_BODY="변경 사항은 있으나 자동 리뷰 결과를 생성하지 못했습니다."
-          else
-            REVIEW_BODY="$RESPONSE"
-          fi
-
-          echo "REVIEW_BODY<<EOF" >> $GITHUB_ENV
-          echo "$REVIEW_BODY" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-      ################################
-      # 6. diff 없음 처리
-      ################################
-      - name: No diff fallback
-        if: env.NO_DIFF == 'true'
+      - name: Get git diff for PR
         run: |
-          echo "REVIEW_BODY<<EOF" >> $GITHUB_ENV
-          echo "코드 변경 사항이 감지되지 않았습니다." >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          git fetch origin "${{ github.event.pull_request.base.ref }}"
+          git fetch origin "${{ github.event.pull_request.head.ref }}"
+          git diff "origin/${{ github.event.pull_request.base.ref }}"..."origin/${{ github.event.pull_request.head.ref }}" > diff.txt
 
-      ################################
-      # 7. PR 코멘트 작성
-      ################################
-      - name: Comment PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -s -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-            -d "{
-              \"body\": \"## PR 리뷰 \n\n${REVIEW_BODY}\"
-            }"
+      - name: Run Gemini Review
+        id: gemini_review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const diff_output = fs.readFileSync("diff.txt", "utf8");
+
+            const { GoogleGenerativeAI } = require("@google/generative-ai");
+            const genAI = new GoogleGenerativeAI("${{ secrets.GEMINI_API_KEY }}");
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+            const prompt = `
+              You are a senior backend software engineer.
+            
+              Your task is to perform a **high-level code review** based on the provided git diff.
+              Although you should analyze the code **class-by-class or file-by-file**,
+              you must still point out important issues within the internal logic of each class.
+            
+              Please focus on the following aspects:
+              - Class and function responsibilities (e.g., SRP violations, overly large methods)
+              - Structure and separation of concerns
+              - Maintainability and performance (e.g., tight coupling, redundant logic)
+              - Security implications (e.g., missing input validation, exposure of sensitive data)
+              - Internal implementation issues (e.g., missing null checks, unclear variable names)
+            
+              **Ignore** the following:
+              - Unnecessary code comments
+              - Styling or formatting issues (e.g., spaces, indentation)
+            
+              **Requirements**:
+              - Write your review in **Korean**
+              - Use **Markdown** format
+              - Clearly mention class or method names where applicable
+              - Do **not** include any intro or outro — just the review content
+            
+            Below is the git diff:
+            
+              <git diff>
+              ${diff_output}
+              </git diff>
+              `;
+            
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            
+            fs.writeFileSync("review_result.txt", text);
+            console.log("Review results saved!");
+
+      - name: Comment on Pull Request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const body = fs.readFileSync("review_result.txt", "utf8");
+            
+            const pr_number = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr_number,
+              body
+            });
