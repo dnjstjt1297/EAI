@@ -77,63 +77,77 @@ jobs:
         run: |
           npm install @google/generative-ai
 
-      - name: Gemini AI Review
-        if: always()
+      # PR 이벤트에서의 변경사항 처리
+      - name: Get git diff for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin "${{ github.event.pull_request.base.ref }}"
+          git fetch origin "${{ github.event.pull_request.head.ref }}"
+          git diff --unified=0 "origin/${{ github.event.pull_request.base.ref }}" > "diff.txt"
+          echo "EVENT_TYPE=pull_request" >> $GITHUB_ENV
+
+      # Push 이벤트에서의 변경사항 처리
+      - name: Get git diff for Push
+        if: github.event_name == 'push'
+        run: |
+          git diff --unified=0 HEAD^ HEAD > "diff.txt"
+          echo "EVENT_TYPE=push" >> $GITHUB_ENV
+
+      # Gemini를 사용한 코드 분석
+      - name: Run Gemini-1.5-flash
+        id: gemini_review
         uses: actions/github-script@v7
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           script: |
-            const fs = require('fs');
-            
-            // 1. 테스트 로그 준비
-            let testLog = "로그 없음";
-            if (fs.existsSync('test.log')) {
-              const fullLog = fs.readFileSync('test.log', 'utf8');
-              testLog = fullLog.split('\n').slice(-150).join('\n');
-            }
-
-            // 2. Git Diff 준비
-            let diff = "변경 사항 없음";
-            try {
-              diff = require('child_process').execSync('git diff origin/${{ github.base_ref }}...HEAD').toString();
-            } catch (e) { console.log("Diff 추출 실패:", e); }
-
-            // 3. 프롬프트 작성
-            const status = "${{ steps.test.outputs.exit_code }}" === "0" ? "성공" : "실패";
-            const prompt = `너는 구글 출신의 시니어 자바 백엔드 개발자야. 현재 PR의 CI 결과는 [${status}]야. 
-            제공된 로그와 코드를 분석해서 '한국어'로 리뷰해줘.
-
-            1. 테스트 요약: 성공/실패 여부와 주요 로그 분석.
-            2. 코드 리뷰: 변경된 코드(Diff) 중 개선이 필요한 부분(성능, 보안, 가독성).
-            3. 종합 의견: 이 PR이 메인 브랜치에 반영되어도 괜찮을지 시니어의 시선에서 조언.
-
-            [테스트 로그]
-            ${testLog}
-
-            [Git Diff]
-            ${diff}`;
-
-            // 4. Gemini 호출
+            const fs = require("fs");
+            const diff_output = fs.readFileSync("diff.txt",'utf8');
+          
             const { GoogleGenerativeAI } = require("@google/generative-ai");
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-            try {
-              const result = await model.generateContent(prompt);
-              const response = await result.response;
-              core.exportVariable('AI_COMMENT', response.text());
-            } catch (e) {
-              core.exportVariable('AI_COMMENT', "AI 분석 중 오류가 발생했습니다.");
+            const genAI = new GoogleGenerativeAI("${{ secrets.GEMINI_API_KEY }}");
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
+      
+            // PR과 Push에 따라 다른 프롬프트 사용
+            let prompt;
+            if (process.env.EVENT_TYPE === 'pull_request') {
+              prompt = Explain in korean. You are a senior software engineer and need to perform a code review based on the results of a given git diff. Review the changed code from different perspectives and let us know if there are any changes that need to be made. If you see any code that needs to be fixed in the result of the git diff, you need to calculate the exact line number by referring to the "@@ -0,0 +0,0 @@" part. The output format is \[{"path":"{ filepath }", "line": { line }, "text": { review comment }, "side": "RIGHT"}\] format must be respected.\n<git diff>${diff_output}</git diff>;
+            } else {
+              prompt = Explain in korean. You are a senior software engineer and need to perform a code review based on the results of a given git diff. Provide a detailed review of the code changes, focusing on code quality, readability, performance, and security. Format your response in Markdown with clear headings for each file reviewed.\n<git diff>${diff_output}</git diff>;
             }
+          
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+      
+            fs.writeFileSync('review_result.txt', text);
+            console.log('Review results saved!');
 
-      # ===== PR에 최종 코멘트 등록 =====
-      - name: Post PR Comment
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
+          # PR 이벤트: 라인별 리뷰 코멘트 추가
+      - name: Format and add PR review comments
+        if: env.EVENT_TYPE == 'pull_request'
+        id: store
         run: |
-          if [ -n "$AI_COMMENT" ]; then
-            gh pr comment ${{ github.event.pull_request.number }} --body "### 🤖 Gemini AI 시니어 개발자 리뷰
-            $AI_COMMENT"
-          fi
+          COMMENT=$(sed '/^/d' review_result.txt | jq -c .)
+          echo "comment=$COMMENT" >> $GITHUB_OUTPUT
+
+      - name: Add Pull Request Review Comment
+        if: env.EVENT_TYPE == 'pull_request'
+        uses: nbaztec/add-pr-review-comment@v1.0.7
+        with:
+          comments: ${{ steps.store.outputs.comment }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token-user-login: 'github-actions[bot]'
+          allow-repeats: false
+
+      # Push 이벤트: 액션 로그에 리뷰 결과 출력 및 아티팩트 업로드
+      - name: Display review results in workflow log
+        if: env.EVENT_TYPE == 'push'
+        run: |
+          echo "Gemini Code Review Results"
+          cat review_result.txt
+
+      - name: Upload review results as artifact
+        if: env.EVENT_TYPE == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-code-review
+          path: review_result.txt
