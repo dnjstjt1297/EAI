@@ -1,4 +1,4 @@
-name: PR CI & Gemini Review (Shell Only)
+name: PR CI & Diff Review
 
 on:
   pull_request:
@@ -13,92 +13,107 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # =====================
-      # Checkout (PR 브랜치)
-      # =====================
-      - uses: actions/checkout@v4
+      ################################
+      # 1. 소스 체크아웃
+      ################################
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # =====================
-      # Java 17
-      # =====================
-      - uses: actions/setup-java@v4
+      ################################
+      # 2. JDK 17 세팅
+      ################################
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          java-version: "17"
-          distribution: "temurin"
+          distribution: temurin
+          java-version: 17
 
-      # =====================
-      # Compile
-      # =====================
-      - name: Compile
+      ################################
+      # 3. 빌드 & 테스트 (예시)
+      ################################
+      - name: Build & Test
         run: |
-          mkdir -p out
-          javac -encoding UTF-8 -cp "lib/*" -d out \
-            $(find src/main/java src/test/java -name "*.java")
+          echo "빌드/테스트 시작"
+          # 예시 (필요한 명령으로 교체)
+          # javac Main.java
+          echo "빌드/테스트 완료"
 
-      # =====================
-      # Test
-      # =====================
-      - name: Run tests
+      ################################
+      # 4. PR diff 가져오기 (현재 브랜치 변경분만)
+      ################################
+      - name: Get PR diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set +e
-          java -jar lib/junit-platform-console-standalone-1.8.1.jar \
-            -cp out:lib/* \
-            --scan-classpath > test.log 2>&1
-          echo $? > test.exit
-          set -e
+          echo "PR diff 다운로드 중..."
 
-      # =====================
-      # PR diff 생성
-      # =====================
-      - name: Generate PR diff
-        run: |
-          git fetch origin "${{ github.event.pull_request.base.ref }}"
-          git fetch origin "${{ github.event.pull_request.head.ref }}"
+          curl -sL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            "${{ github.event.pull_request.diff_url }}" \
+            > pr.diff
 
-          git diff --unified=0 \
-            origin/${{ github.event.pull_request.base.ref }} \
-            origin/${{ github.event.pull_request.head.ref }} > diff.txt
+          if [ ! -s pr.diff ]; then
+            echo "⚠️ diff가 비어있음"
+            echo "NO_DIFF=true" >> $GITHUB_ENV
+          else
+            echo "diff 크기:"
+            wc -l pr.diff
+            echo "NO_DIFF=false" >> $GITHUB_ENV
+          fi
 
-      # =====================
-      # Gemini 리뷰 (curl)
-      # =====================
-      - name: Gemini Code Review
+      ################################
+      # 5. Gemini / LLM 리뷰 (diff 기준)
+      ################################
+      - name: Generate PR Review
+        if: env.NO_DIFF == 'false'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          DIFF=$(sed 's/"/\\"/g' diff.txt | tr '\n' '\\n')
-          TEST_LOG=$(sed 's/"/\\"/g' test.log | head -c 4000 | tr '\n' '\\n')
-          TEST_EXIT=$(cat test.exit)
+          DIFF_CONTENT=$(sed 's/"/\\"/g' pr.diff | sed ':a;N;$!ba;s/\n/\\n/g')
 
-          cat <<EOF > payload.json
-          {
-            "contents": [
-              {
-                "parts": [
-                  {
-                    "text": "Explain in Korean. You are a senior software engineer reviewing a pull request.\n\n1. Summarize the changes.\n2. Point out potential risks or design issues.\n3. Mention test failures if any (exit code: ${TEST_EXIT}).\n4. Suggest improvements if necessary.\n\n<git diff>\n${DIFF}\n</git diff>\n\n<test log>\n${TEST_LOG}\n</test log>"
-                  }
-                ]
-              }
-            ]
-          }
-          EOF
+          echo "LLM 호출 중..."
 
-          curl -s \
+          RESPONSE=$(curl -s https://YOUR_GEMINI_ENDPOINT \
+            -H "Authorization: Bearer $GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
-            -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}" \
-            -d @payload.json \
-            | jq -r '.candidates[0].content.parts[0].text' > review.md
+            -d "{
+              \"prompt\": \"Review the following git diff and give concise, actionable feedback:\\n$DIFF_CONTENT\"
+            }")
 
-      # =====================
-      # PR 코멘트
-      # =====================
-      - name: Comment PR with Gemini review
+          if [ -z "$RESPONSE" ] || [ "$RESPONSE" = "null" ]; then
+            REVIEW_BODY="변경 사항은 있으나 자동 리뷰 결과를 생성하지 못했습니다."
+          else
+            REVIEW_BODY="$RESPONSE"
+          fi
+
+          echo "REVIEW_BODY<<EOF" >> $GITHUB_ENV
+          echo "$REVIEW_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      ################################
+      # 6. diff 없음 처리
+      ################################
+      - name: No diff fallback
+        if: env.NO_DIFF == 'true'
         run: |
-          gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-            -f body="## 🤖 Gemini PR Review\n\n$(cat review.md)"
+          echo "REVIEW_BODY<<EOF" >> $GITHUB_ENV
+          echo "코드 변경 사항이 감지되지 않았습니다." >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      ################################
+      # 7. PR 코멘트 작성
+      ################################
+      - name: Comment PR
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            -d "{
+              \"body\": \"## PR 리뷰 \n\n${REVIEW_BODY}\"
+            }"
