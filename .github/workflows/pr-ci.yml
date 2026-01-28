@@ -1,31 +1,42 @@
-name: Main Branch Build & Test CI
+name: PR CI & Gemini Comment
 
 on:
-  push:
-    branches: [ "main" ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+    branches:
+      - 'main'
 
 permissions:
+  pull-requests: write
   contents: read
 
 jobs:
-  build-and-test:
+  pr-ci:
     runs-on: ubuntu-latest
 
+    env:
+      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
     steps:
+      # ===== 1. Checkout =====
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # ===== 2. Set up Java 17 =====
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ===== 운영 환경용 config.properties 생성 =====
-      - name: Create Production config.properties
+      # ===== 3. Create config.properties =====
+      - name: Create config.properties
         run: |
           mkdir -p src/main/resources src/test/resources
-          
           cat <<EOF > src/main/resources/config.properties
           applicant.key=${{ secrets.APPLICANT_KEY }}
           db.driver=${{ secrets.DB_DRIVER }}
@@ -39,7 +50,6 @@ jobs:
           sftp.filepath=${{ secrets.SFTP_FILENAME }}
           EOF
 
-          # 테스트용 설정도 동일하게 생성 (빌드 시 테스트 수행용)
           cat <<EOF > src/test/resources/config.properties
           applicant.key=${{ secrets.T_APPLICANT_KEY }}
           db.driver=${{ secrets.T_DB_DRIVER }}
@@ -53,21 +63,16 @@ jobs:
           sftp.filepath=${{ secrets.T_SFTP_FILENAME }}
           EOF
 
+      # ===== 4. Compile & Test =====
       - name: Compile
         run: |
           mkdir -p out
-          javac -encoding UTF-8 -cp "lib/*" -d out \
-            $(find src/main/java src/test/java -name "*.java")
+          javac -encoding UTF-8 -cp "lib/*" -d out $(find src/main/java src/test/java -name "*.java")
 
-      - name: Run Final Tests
+      - name: Run tests
+        id: test
         run: |
-          java -jar lib/junit-platform-console-standalone-1.8.1.jar \
-            -cp out:lib/* \
-            --scan-classpath > test_result.log 2>&1
-
-      - name: Upload Test Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: main-test-log
-          path: test_result.log
+          set +e
+          java -jar lib/junit-platform-console-standalone-1.8.1.jar -cp out:lib/* --scan-classpath > test.log 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
