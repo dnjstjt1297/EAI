@@ -72,6 +72,11 @@ jobs:
           set -e
 
       # ===== Gemini AI 분석 (로그 + 코드 리뷰) =====
+
+      - name: Install Gemini AI
+        run: |
+          npm install @google/generative-ai
+
       - name: Gemini AI Review
         if: always()
         uses: actions/github-script@v7
