@@ -137,18 +137,21 @@ jobs:
         id: store
         run: |
           echo "Validating review_result.txt..."
-          jq -c '.' review_result.txt > review_result_valid.json
-          COMMENT=$(cat review_result_valid.json)
-          echo "comment=$COMMENT" >> $GITHUB_OUTPUT
+          # jq로 JSON 유효성 검사 및 한 줄 압축
+          COMMENT=$(jq -c '.' review_result.txt)
+
+          # GITHUB_OUTPUT에 안전하게 쓰기 (Here-doc 방식)
+          echo "comment<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Add Pull Request Review Comment
         if: ${{ github.event_name == 'pull_request' }}
         uses: nbaztec/add-pr-review-comment@v1.0.7
         with:
+          # steps.store.outputs.comment에 저장된 JSON을 그대로 전달
           comments: ${{ steps.store.outputs.comment }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-token-user-login: 'github-actions[bot]'
-          allow-repeats: false
 
       # ===== 9. Push 이벤트 리뷰 출력 =====
       - name: Display review results
