@@ -59,11 +59,13 @@ jobs:
           javac -encoding UTF-8 -cp "lib/*" -d out \
             $(find src/main/java src/test/java -name "*.java")
 
-      - name: Run Final Tests
+      - name: Run tests
+        id: test
         run: |
-          java -jar lib/junit-platform-console-standalone-1.8.1.jar \
-            -cp out:lib/* \
-            --scan-classpath > test_result.log 2>&1
+          set +e
+          java -jar lib/junit-platform-console-standalone-1.8.1.jar -cp out:lib/* --scan-classpath > test.log 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
 
       - name: Upload Test Log
         if: always()
