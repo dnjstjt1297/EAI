@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
-    branches: [main, master] # Push 이벤트도 대응하려면 브랜치 지정 필요
+    branches:
 
 permissions:
   pull-requests: write
@@ -14,19 +14,26 @@ jobs:
   pr-ci:
     runs-on: ubuntu-latest
 
+    env:
+      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+      JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.17-10/x64
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
     steps:
+      # ===== 1. Checkout =====
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # ===== 2. Set up Java 17 =====
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ===== 프로젝트 설정 파일 생성 =====
+      # ===== 3. Create config.properties =====
       - name: Create config.properties
         run: |
           mkdir -p src/main/resources src/test/resources
@@ -56,97 +63,101 @@ jobs:
           sftp.filepath=${{ secrets.T_SFTP_FILENAME }}
           EOF
 
-      # ===== 컴파일 및 테스트 =====
+      # ===== 4. Compile & Test =====
       - name: Compile
         run: |
           mkdir -p out
-          javac -encoding UTF-8 -cp "lib/*" -d out \
-            $(find src/main/java src/test/java -name "*.java")
+          javac -encoding UTF-8 -cp "lib/*" -d out $(find src/main/java src/test/java -name "*.java")
 
       - name: Run tests
         id: test
         run: |
           set +e
-          java -jar lib/junit-platform-console-standalone-1.8.1.jar \
-            -cp out:lib/* \
-            --scan-classpath > test.log 2>&1
+          java -jar lib/junit-platform-console-standalone-1.8.1.jar -cp out:lib/* --scan-classpath > test.log 2>&1
           echo "exit_code=$?" >> $GITHUB_OUTPUT
           set -e
 
-      # ===== Gemini AI 분석 =====
+      # ===== 5. Install Gemini SDK =====
       - name: Install Gemini AI
         run: npm install @google/generative-ai
 
-      - name: Get git diff for PR
+      # ===== 6. Get Git Diff =====
+      - name: Get git diff
         run: |
-          git fetch origin "${{ github.event.pull_request.base.ref }}"
-          git fetch origin "${{ github.event.pull_request.head.ref }}"
-          git diff "origin/${{ github.event.pull_request.base.ref }}"..."origin/${{ github.event.pull_request.head.ref }}" > diff.txt
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            git fetch origin "${{ github.event.pull_request.base.ref }}"
+            git fetch origin "${{ github.event.pull_request.head.ref }}"
+            git diff --unified=0 "origin/${{ github.event.pull_request.base.ref }}"..."origin/${{ github.event.pull_request.head.ref }}" > diff.txt
+            echo "EVENT_TYPE=pull_request" >> $GITHUB_ENV
+          else
+            git diff --unified=0 HEAD^ HEAD > diff.txt
+            echo "EVENT_TYPE=push" >> $GITHUB_ENV
+          fi
 
+      # ===== 7. Run Gemini Review =====
       - name: Run Gemini Review
         id: gemini_review
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require("fs");
-            const diff_output = fs.readFileSync("diff.txt", "utf8");
-
             const { GoogleGenerativeAI } = require("@google/generative-ai");
-            const genAI = new GoogleGenerativeAI("${{ secrets.GEMINI_API_KEY }}");
+            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-            const prompt = `
-              You are a senior backend software engineer.
-            
-              Your task is to perform a **high-level code review** based on the provided git diff.
-              Although you should analyze the code **class-by-class or file-by-file**,
-              you must still point out important issues within the internal logic of each class.
-            
-              Please focus on the following aspects:
-              - Class and function responsibilities (e.g., SRP violations, overly large methods)
-              - Structure and separation of concerns
-              - Maintainability and performance (e.g., tight coupling, redundant logic)
-              - Security implications (e.g., missing input validation, exposure of sensitive data)
-              - Internal implementation issues (e.g., missing null checks, unclear variable names)
-            
-              **Ignore** the following:
-              - Unnecessary code comments
-              - Styling or formatting issues (e.g., spaces, indentation)
-            
-              **Requirements**:
-              - Write your review in **Korean**
-              - Use **Markdown** format
-              - Clearly mention class or method names where applicable
-              - Do **not** include any intro or outro — just the review content
-            
-            Below is the git diff:
-            
-              <git diff>
-              ${diff_output}
-              </git diff>
-              `;
-            
+            const diff = fs.readFileSync("diff.txt", "utf8");
+
+            let prompt = "";
+            if (process.env.EVENT_TYPE === "pull_request") {
+              prompt = `
+              Explain in Korean. You are a senior software engineer performing line-by-line code review on the given git diff.
+              Identify issues in code quality, readability, performance, and security.
+              Include exact line numbers based on the "@@ -x,y +x,y @@" format.
+              Output in JSON format:
+              [{"path":"{filepath}", "line":{line}, "text":"{review comment}", "side":"RIGHT"}]
+              <git diff>${diff}</git diff>`;
+            } else {
+              prompt = `
+              Explain in Korean. You are a senior software engineer performing high-level code review on the given git diff.
+              Focus on maintainability, readability, performance, and security.
+              Format your response in Markdown with clear headings per file.
+              <git diff>${diff}</git diff>`;
+            }
+
             const result = await model.generateContent(prompt);
             const response = await result.response;
             const text = response.text();
-            
             fs.writeFileSync("review_result.txt", text);
             console.log("Review results saved!");
 
-      - name: Comment on Pull Request
-        uses: actions/github-script@v7
+      # ===== 8. Add PR Comments =====
+      - name: Format PR Review Comments
+        if: env.EVENT_TYPE == 'pull_request'
+        id: store
+        run: |
+          COMMENT=$(jq -c '.' review_result.txt)
+          echo "comment=$COMMENT" >> $GITHUB_OUTPUT
+
+      - name: Add Pull Request Review Comment
+        if: env.EVENT_TYPE == 'pull_request'
+        uses: nbaztec/add-pr-review-comment@v1.0.7
         with:
-          script: |
-            const fs = require("fs");
-            const body = fs.readFileSync("review_result.txt", "utf8");
-            
-            const pr_number = context.payload.pull_request.number;
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: pr_number,
-              body
-            });
+          comments: ${{ steps.store.outputs.comment }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token-user-login: 'github-actions[bot]'
+          allow-repeats: false
+
+      # ===== 9. Push 이벤트 리뷰 출력 =====
+      - name: Display review results
+        if: env.EVENT_TYPE == 'push'
+        run: |
+          echo "===== Gemini Code Review Results ====="
+          cat review_result.txt
+          echo "======================================"
+
+      - name: Upload review results artifact
+        if: env.EVENT_TYPE == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-code-review
+          path: review_result.txt
