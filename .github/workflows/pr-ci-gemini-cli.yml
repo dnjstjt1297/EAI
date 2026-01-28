@@ -1,0 +1,124 @@
+name: PR CI & Gemini Comment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# GitHub CLI 사용을 위한 쓰기 권한 설정
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  pr-ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ===== 프로젝트 설정 파일 생성 =====
+      - name: Create config.properties
+        run: |
+          mkdir -p src/main/resources src/test/resources
+          
+          # Main Config
+          cat <<EOF > src/main/resources/config.properties
+          applicant.key=${{ secrets.APPLICANT_KEY }}
+          db.driver=${{ secrets.DB_DRIVER }}
+          db.url=${{ secrets.DB_URL }}
+          db.user=${{ secrets.DB_USER }}
+          db.password=${{ secrets.DB_PASSWORD }}
+          sftp.host=${{ secrets.SFTP_HOST }}
+          sftp.port=${{ secrets.SFTP_PORT }}
+          sftp.username=${{ secrets.SFTP_USERNAME }}
+          sftp.password=${{ secrets.SFTP_PASSWORD }}
+          sftp.filepath=${{ secrets.SFTP_FILENAME }}
+          EOF
+
+          # Test Config
+          cat <<EOF > src/test/resources/config.properties
+          applicant.key=${{ secrets.T_APPLICANT_KEY }}
+          db.driver=${{ secrets.T_DB_DRIVER }}
+          db.url=${{ secrets.T_DB_URL }}
+          db.user=${{ secrets.T_DB_USER }}
+          db.password=${{ secrets.T_DB_PASSWORD }}
+          sftp.host=${{ secrets.T_SFTP_HOST }}
+          sftp.port=${{ secrets.T_SFTP_PORT }}
+          sftp.username=${{ secrets.T_SFTP_USERNAME }}
+          sftp.password=${{ secrets.T_SFTP_PASSWORD }}
+          sftp.filepath=${{ secrets.T_SFTP_FILENAME }}
+          EOF
+
+      # ===== 컴파일 및 테스트 =====
+      - name: Compile
+        run: |
+          mkdir -p out
+          javac -encoding UTF-8 -cp "lib/*" -d out \
+            $(find src/main/java src/test/java -name "*.java")
+
+      - name: Run tests
+        id: test
+        run: |
+          set +e
+          java -jar lib/junit-platform-console-standalone-1.8.1.jar \
+            -cp out:lib/* \
+            --scan-classpath > test.log 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
+
+      # ===== Gemini 2.0 AI 리뷰 코멘트 =====
+      - name: Gemini PR Comment
+        if: always()
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. 테스트 결과 확인
+          RESULT="성공(SUCCESS)"
+          if [ "${{ steps.test.outputs.exit_code }}" != "0" ]; then
+            RESULT="실패(FAILURE)"
+          fi
+
+          # 2. 로그 데이터 추출 (최근 150줄)
+          LOG_DATA=$(tail -n 150 test.log)
+
+          # 3. 프롬프트 구성 (시니어 엔지니어 페르소나)
+          PROMPT="너는 구글 출신의 시니어 자바 백엔드 개발자야. 
+          현재 PR의 CI 테스트 결과는 [$RESULT]야.
+          
+          제공된 테스트 로그를 분석해서 다음 내용을 '한국어'로 작성해줘:
+          1. 요약: 테스트 성공/실패 여부와 실행된 테스트 개수 요약.
+          2. 원인 분석: 실패했다면 어떤 테스트 케이스에서 에러가 발생했는지, 구체적인 원인(Exception 등) 지목.
+          3. 개선 제안: 로그상에 보이는 잠재적인 위험 요소나 코드 개선 방향이 있다면 조언.
+
+          마크다운과 이모지를 적절히 사용해서 가독성 좋게 작성해줘.
+
+          [테스트 로그]
+          $LOG_DATA"
+
+          # 4. JSON 생성 (jq를 사용하여 특수문자 완벽 처리)
+          PAYLOAD=$(jq -n --arg msg "$PROMPT" '{contents: [{parts: [{text: $msg}]}]}')
+
+          # 5. Gemini 2.0 Flash API 호출
+          RESPONSE=$(curl -s \
+            -H "Content-Type: application/json" \
+            -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+            -d "$PAYLOAD")
+
+          # 6. 응답 추출 및 PR 코멘트 등록
+          COMMENT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+          if [ -n "$COMMENT" ] && [ "$COMMENT" != "null" ]; then
+            gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
+          else
+            echo "Error: AI 코멘트 생성 실패"
+            echo "API Response: $RESPONSE"
+          fi
