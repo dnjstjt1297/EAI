@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - dev
-    types: [opened, synchronize]
+    types: [opened]
 
 jobs:
   code-review:
@@ -99,5 +99,3 @@ jobs:
               issue_number: pr_number,
               body
             });
-            
-            fi
