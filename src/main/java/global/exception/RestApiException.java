@@ -1,7 +1,9 @@
 package main.java.global.exception;
 
+import lombok.Getter;
 import main.java.global.exception.errorcode.ErrorCode;
 
+@Getter
 public class RestApiException extends RuntimeException {
 
     private final ErrorCode errorCode;
@@ -11,7 +13,4 @@ public class RestApiException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
-    public ErrorCode getErrorCode() {
-        return errorCode;
-    }
 }
