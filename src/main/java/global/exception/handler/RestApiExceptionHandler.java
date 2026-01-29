@@ -6,7 +6,7 @@ import main.java.global.exception.dto.ErrorCodeDto;
 import main.java.global.exception.errorcode.enums.CommonErrorCode;
 
 @NoArgsConstructor
-public class ExceptionHandler {
+public class RestApiExceptionHandler {
 
     private static final String ERROR_KEY = "error";
     private static final String MESSAGE_MESSAGE = "message";
