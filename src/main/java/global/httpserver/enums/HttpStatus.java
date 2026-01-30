@@ -1,5 +1,8 @@
 package main.java.global.httpserver.enums;
 
+import lombok.Getter;
+
+@Getter
 public enum HttpStatus {
 
     OK(200, "OK"),
@@ -22,10 +25,6 @@ public enum HttpStatus {
 
     public int value() {
         return this.value;
-    }
-
-    public String getReasonPhrase() {
-        return this.reasonPhrase;
     }
 
     public String valueToString() {
