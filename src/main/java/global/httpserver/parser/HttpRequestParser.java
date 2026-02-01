@@ -2,10 +2,8 @@ package main.java.global.httpserver.parser;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.util.Collections;
@@ -16,9 +14,6 @@ import main.java.global.exception.errorcode.enums.HttpServerErrorCode;
 import main.java.global.httpserver.dto.request.HttpRequest;
 import main.java.global.httpserver.enums.HttpMethod;
 
-/**
- * Request를 HTTP 1.1 프로토콜 규격에 맞게 파싱하는 클래스입니다. (단 URL의 path variable은 제외하였습니다.)
- */
 public class HttpRequestParser {
 
     public static final String HEADER_CONTENT_LENGTH = "Content-Length";
@@ -26,18 +21,19 @@ public class HttpRequestParser {
 
     public HttpRequest parse(InputStream inputStream) {
         try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, UTF_8));
-
-            String line = reader.readLine();
-            while (line != null && line.isEmpty()) {
-                line = reader.readLine();
-            }
+            String line = readLine(inputStream);
             if (line == null) {
-                throw new RestApiException(HttpServerErrorCode.NOTFOUND_REQUEST);
+                return null;
+            }
+
+            while (line.isEmpty()) { // 빈 라인 스킵
+                line = readLine(inputStream);
+                if (line == null) {
+                    return null;
+                }
             }
 
             String[] request = line.split("\\s+");
-
             if (request.length < 2) {
                 throw new RestApiException(HttpServerErrorCode.INVALID_REQUEST);
             }
@@ -46,30 +42,46 @@ public class HttpRequestParser {
             String url = request[1];
             String path = parsePath(url);
             Map<String, String> params = parseQueryParams(url);
-            Map<String, String> headers = parseHeaders(reader);
-            String body = parseBody(reader, headers);
+            Map<String, String> headers = parseHeaders(inputStream);
+            String body = parseBody(inputStream, headers);
+
             String version = (request.length >= 3) ? request[2].split("/")[1] : VERSION;
 
             return new HttpRequest(method, url, path, version, params, headers, body);
 
         } catch (Exception e) {
-            throw new RestApiException(HttpServerErrorCode.INVALID_REQUEST);
+            if (e instanceof RestApiException) {
+                throw (RestApiException) e;
+            }
+            return null;
         }
     }
 
-    private String parsePath(String url) {
-        if (url == null || url.isEmpty()) {
-            return "/";
+    private String readLine(InputStream in) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        int b;
+        while ((b = in.read()) != -1) {
+            if (b == '\r') {
+                continue;
+            }
+            if (b == '\n') {
+                break;
+            }
+            sb.append((char) b);
         }
+        if (b == -1 && sb.isEmpty()) {
+            return null;
+        }
+        return sb.toString();
+    }
 
+    private String parsePath(String url) {
         try {
             URI uri = new URI(url);
             String path = uri.getPath();
-
             if (path == null || path.isEmpty()) {
                 return "/";
             }
-
             path = path.replaceAll("//+", "/");
             if (path.length() > 1 && path.endsWith("/")) {
                 path = path.substring(0, path.length() - 1);
@@ -99,10 +111,10 @@ public class HttpRequestParser {
         return params;
     }
 
-    private Map<String, String> parseHeaders(BufferedReader reader) throws IOException {
+    private Map<String, String> parseHeaders(InputStream in) throws IOException {
         Map<String, String> headers = new HashMap<>();
         String line;
-        while ((line = reader.readLine()) != null && !line.isEmpty()) {
+        while ((line = readLine(in)) != null && !line.isEmpty()) {
             String[] headerTokens = line.split(": ", 2);
             if (headerTokens.length == 2) {
                 String key = headerTokens[0].trim().toLowerCase();
@@ -113,24 +125,24 @@ public class HttpRequestParser {
         return headers;
     }
 
-    private String parseBody(BufferedReader reader, Map<String, String> headers)
-            throws IOException {
-        String lengthStr = headers.get(HEADER_CONTENT_LENGTH);
-        if (lengthStr == null) {
+    private String parseBody(InputStream in, Map<String, String> headers) throws IOException {
+        String lengthStr = headers.get(HEADER_CONTENT_LENGTH.toLowerCase());
+        if (lengthStr == null || lengthStr.isEmpty()) {
             return "";
         }
 
         int length = Integer.parseInt(lengthStr);
-        char[] buffer = new char[length];
+        byte[] byteBuffer = new byte[length];
         int readSum = 0;
+
         while (readSum < length) {
-            int read = reader.read(buffer, readSum, length - readSum);
+            int read = in.read(byteBuffer, readSum, length - readSum);
             if (read == -1) {
                 break;
             }
             readSum += read;
         }
-        return new String(buffer, 0, readSum);
-    }
 
+        return new String(byteBuffer, 0, readSum, UTF_8);
+    }
 }

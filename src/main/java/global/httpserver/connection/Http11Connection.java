@@ -66,16 +66,20 @@ public class Http11Connection implements HttpConnection {
             while (true) {
                 try {
                     HttpRequest request = httpRequestParser.parse(in);
-                    frontController.doDispatch(request, out);
 
-                    if (request.headers().containsKey(HEADER_CONNECTION.toLowerCase()) &&
-                            request.headers().get(HEADER_CONNECTION.toLowerCase())
-                                    .equals(CLOSE.toLowerCase())) {
+                    if (request == null) {
+                        break;
+                    }
+
+                    frontController.doDispatch(request, out);
+                    String connHeader = request.headers().get(HEADER_CONNECTION.toLowerCase());
+                    if (CLOSE.equalsIgnoreCase(connHeader)) {
                         break;
                     }
 
                 } catch (Exception e) {
                     sendErrorCodeResponse(out, e);
+                    break;
                 }
             }
 
