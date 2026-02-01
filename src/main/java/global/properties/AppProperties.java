@@ -1,6 +1,5 @@
 package main.java.global.properties;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 import lombok.AllArgsConstructor;
@@ -13,7 +12,7 @@ public class AppProperties {
     public void init(String path) {
         try (InputStream inputStream = getClass().getResourceAsStream(path)) {
             properties.load(inputStream);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
