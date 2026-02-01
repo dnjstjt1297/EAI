@@ -1,6 +1,6 @@
 package main.java;
 
-import main.java.global.container.IocContainer;
+import main.java.global.container.Container;
 import main.java.global.exception.handler.RestApiExceptionHandler;
 import main.java.global.httpserver.FrontController;
 import main.java.global.httpserver.connection.Http11Connection;
@@ -13,18 +13,19 @@ public class Main {
 
     public static void main(String[] args) {
 
-        FrontController frontController =
-                IocContainer.getBean("frontController", FrontController.class);
-        HttpRequestParser httpRequestParser =
-                IocContainer.getBean("httpRequestParser", HttpRequestParser.class);
-        HttpResponseSender httpResponseSender
-                = IocContainer.getBean("httpResponseSender", HttpResponseSender.class);
-        RestApiExceptionHandler restApiExceptionHandler
-                = IocContainer.getBean("restApiExceptionHandler", RestApiExceptionHandler.class);
         HandlerMapping handlerMapping
-                = IocContainer.getBean("handlerMapping", HandlerMapping.class);
-
+                = Container.getBean("handlerMapping", HandlerMapping.class);
         handlerMapping.init();
+
+        FrontController frontController
+                = Container.getBean("frontController", FrontController.class);
+        HttpRequestParser httpRequestParser
+                = Container.getBean("httpRequestParser", HttpRequestParser.class);
+        HttpResponseSender httpResponseSender
+                = Container.getBean("httpResponseSender", HttpResponseSender.class);
+        RestApiExceptionHandler restApiExceptionHandler
+                = Container.getBean("restApiExceptionHandler", RestApiExceptionHandler.class);
+
         HttpConnection connection = new Http11Connection(frontController, httpRequestParser,
                 httpResponseSender, restApiExceptionHandler);
 
