@@ -1,4 +1,4 @@
-package test.unit.exception.handler;
+package test.java.unit.exception.handler;
 
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
