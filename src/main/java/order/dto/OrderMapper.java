@@ -28,7 +28,10 @@ public class OrderMapper {
                 .collect(Collectors.toMap(
                         Header::getUserId,
                         header -> header,
-                        (existing, replacement) -> existing
+                        (existing, replacement) -> {
+                            System.err.println("중복 헤더 발견: " + existing.getUserId());
+                            return existing;
+                        }
                 ));
 
         return orderRequest.getItems().stream()
