@@ -1,4 +1,4 @@
-package test.unit.httpserver;
+package test.java.unit.httpserver;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
-import main.java.controller.OrderController;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.dto.ErrorCodeDto;
 import main.java.global.exception.errorcode.enums.CommonErrorCode;
@@ -26,6 +25,7 @@ import main.java.global.httpserver.handler.HandlerMapping;
 import main.java.global.httpserver.handler.HandlerMethod;
 import main.java.global.httpserver.interceptor.HandlerInterceptor;
 import main.java.global.httpserver.sender.HttpResponseSender;
+import main.java.order.controller.OrderController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

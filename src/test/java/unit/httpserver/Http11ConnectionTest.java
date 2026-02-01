@@ -1,4 +1,4 @@
-package test.unit.httpserver;
+package test.java.unit.httpserver;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -11,13 +11,11 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.HashMap;
-import main.java.global.exception.handler.RestApiExceptionHandler;
 import main.java.global.httpserver.FrontController;
 import main.java.global.httpserver.connection.Http11Connection;
 import main.java.global.httpserver.dto.request.HttpRequest;
 import main.java.global.httpserver.enums.HttpMethod;
 import main.java.global.httpserver.parser.HttpRequestParser;
-import main.java.global.httpserver.sender.HttpResponseSender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,10 +32,6 @@ public class Http11ConnectionTest {
     FrontController frontController;
     @Mock
     HttpRequestParser parser;
-    @Mock
-    HttpResponseSender sender;
-    @Mock
-    RestApiExceptionHandler exceptionHandler;
 
     @InjectMocks
     Http11Connection connection;
