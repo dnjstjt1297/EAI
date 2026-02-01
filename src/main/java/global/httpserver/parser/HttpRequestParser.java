@@ -118,7 +118,7 @@ public class HttpRequestParser {
             String[] headerTokens = line.split(": ", 2);
             if (headerTokens.length == 2) {
                 String key = headerTokens[0].trim().toLowerCase();
-                String value = headerTokens[1].trim();
+                String value = headerTokens[1].trim().toLowerCase();
                 headers.put(key, value);
             }
         }
