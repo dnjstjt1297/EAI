@@ -1,5 +1,6 @@
 package main.java.global.exception.handler;
 
+import java.lang.reflect.InvocationTargetException;
 import lombok.NoArgsConstructor;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.dto.ErrorCodeDto;
@@ -15,17 +16,22 @@ public class RestApiExceptionHandler {
         ErrorCodeDto errorCodeDto;
         String message;
 
+        if (e instanceof InvocationTargetException ite) {
+            e = (Exception) ite.getTargetException();
+        }
+
         if (e instanceof RestApiException rae) {
             message = createErrorMessage(rae.getErrorCode().name(), rae.getMessage());
             errorCodeDto = new ErrorCodeDto(message, rae.getErrorCode().getStatus());
 
         } else if (e instanceof IllegalArgumentException) {
-            message = createErrorMessage(CommonErrorCode.INVALID_PARAMETER.name(), e.getMessage());
+            message = createErrorMessage(CommonErrorCode.INVALID_PARAMETER.name(),
+                    CommonErrorCode.INVALID_PARAMETER.getMessage());
             errorCodeDto = new ErrorCodeDto(message, CommonErrorCode.INVALID_PARAMETER.getStatus());
 
         } else {
             message = createErrorMessage(CommonErrorCode.INTERNAL_SERVER_ERROR.name(),
-                    e.getMessage());
+                    CommonErrorCode.INTERNAL_SERVER_ERROR.getMessage());
             errorCodeDto = new ErrorCodeDto(message,
                     CommonErrorCode.INTERNAL_SERVER_ERROR.getStatus());
         }

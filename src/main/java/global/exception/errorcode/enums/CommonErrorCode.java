@@ -1,8 +1,10 @@
 package main.java.global.exception.errorcode.enums;
 
+import lombok.AllArgsConstructor;
 import main.java.global.exception.errorcode.ErrorCode;
 import main.java.global.httpserver.enums.HttpStatus;
 
+@AllArgsConstructor
 public enum CommonErrorCode implements ErrorCode {
 
     INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "잘못된 파라미터 입니다."),
@@ -13,11 +15,6 @@ public enum CommonErrorCode implements ErrorCode {
     private final HttpStatus status;
     private final String message;
 
-    CommonErrorCode(HttpStatus status, String message) {
-        this.status = status;
-        this.message = message;
-
-    }
 
     @Override
     public HttpStatus getStatus() {

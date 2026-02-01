@@ -17,6 +17,7 @@ public class HttpResponseSender {
     private static final String HEADER_DATE = "Date";
     private static final String HEADER_SERVER = "Server";
     private static final String HEADER_CONNECTION = "Connection";
+    private static final String CLOSE = "close";
     private static final String HEADER_CHARSET = "charset";
     private static final String SERVER_NAME = "EAI_SERVER";
     public static final String APPLICATION_JSON = "application/json";
@@ -63,7 +64,29 @@ public class HttpResponseSender {
                     response.status().valueToString() + " " +
                     response.status().getReasonPhrase() + "\r\n");
 
+            response.headers().put(HEADER_DATE, ZonedDateTime.now().toString());
+            response.headers().put(HEADER_SERVER, SERVER_NAME);
+            response.headers().put(HEADER_CONNECTION, "close");
+            response.headers()
+                    .put(HEADER_CONTENT_TYPE,
+                            APPLICATION_JSON + "; " + HEADER_CHARSET + "=" + UTF_8.name());
+            response.headers()
+                    .put(HEADER_CONTENT_LENGTH,
+                            String.valueOf(response.body().getBytes(UTF_8).length));
+
+            for (Map.Entry<String, String> header : response.headers().entrySet()) {
+                writer.print(header.getKey() + ": " + header.getValue() + "\r\n");
+            }
+
+            writer.print("\r\n");
+            writer.print(response.body());
+
+            if (writer.checkError()) {
+                System.err.println("Error in HTTP response writer");
+            }
         } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
             writer.flush();
         }
     }
@@ -73,15 +96,19 @@ public class HttpResponseSender {
 
         response.headers().put(HEADER_DATE, ZonedDateTime.now().toString());
         response.headers().put(HEADER_SERVER, SERVER_NAME);
-        response.headers().put(HEADER_CONTENT_LENGTH,
-                String.valueOf(response.body().getBytes().length));
+        response.headers()
+                .put(HEADER_CONTENT_LENGTH, String.valueOf(response.body().getBytes(UTF_8).length));
 
-        if (request.headers().containsKey(HEADER_CONNECTION)) {
-            response.headers().put(HEADER_CONNECTION, request.headers().get(HEADER_CONNECTION));
+        if (request != null && request.headers().containsKey(HEADER_CONNECTION.toLowerCase())) {
+            String clientConn = request.headers().get(HEADER_CONNECTION.toLowerCase());
+            response.headers().put(HEADER_CONNECTION, clientConn);
+
+        } else {
+            response.headers().put(HEADER_CONNECTION, CLOSE);
         }
 
         response.headers().put(HEADER_CONTENT_TYPE, APPLICATION_JSON + "; "
-                + HEADER_CHARSET + UTF_8);
+                + HEADER_CHARSET + "=" + UTF_8.name());
 
     }
 
