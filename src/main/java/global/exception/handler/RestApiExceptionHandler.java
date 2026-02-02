@@ -16,7 +16,7 @@ public class RestApiExceptionHandler {
         ErrorCodeDto errorCodeDto;
         String message;
 
-        if (e instanceof InvocationTargetException ite) {
+        while (e instanceof InvocationTargetException ite) {
             e = (Exception) ite.getTargetException();
         }
 

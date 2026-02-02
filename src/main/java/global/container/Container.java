@@ -1,22 +1,32 @@
 package main.java.global.container;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.ArrayList;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import javax.sql.DataSource;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import main.java.global.exception.handler.RestApiExceptionHandler;
 import main.java.global.httpserver.FrontController;
+import main.java.global.httpserver.connection.Http11Connection;
+import main.java.global.httpserver.connection.HttpConnection;
+import main.java.global.httpserver.dto.MappingInfo;
+import main.java.global.httpserver.frontinterceptor.FrontInterceptor;
+import main.java.global.httpserver.frontinterceptor.LoggingFrontInterceptor;
+import main.java.global.httpserver.frontinterceptor.ValidationFrontInterceptor;
 import main.java.global.httpserver.handler.HandlerAdaptor;
 import main.java.global.httpserver.handler.HandlerMapping;
-import main.java.global.httpserver.interceptor.HandlerInterceptor;
-import main.java.global.httpserver.interceptor.ValidationInterceptor;
+import main.java.global.httpserver.handler.HandlerMethod;
 import main.java.global.httpserver.parser.HttpRequestParser;
 import main.java.global.httpserver.sender.HttpResponseSender;
+import main.java.global.logging.LogContext;
+import main.java.global.logging.annotation.LogExecution;
+import main.java.global.logging.interceptor.LoggingInterceptor;
 import main.java.global.properties.AppProperties;
-import main.java.global.transaction.TransactionProxyGenerator;
+import main.java.global.proxy.ProxyGenerator;
+import main.java.global.transaction.annotation.Transactional;
 import main.java.global.transaction.holder.ConnectionHolder;
 import main.java.global.transaction.interceptor.TransactionInterceptor;
 import main.java.global.transaction.manager.DataSourceTransactionManager;
@@ -38,92 +48,157 @@ import main.java.order.sftp.sender.SftpSender;
  * 의존성 관리 컨테이너.
  */
 
+@Slf4j
 public class Container {
 
-    // 빈처럼 객체 관리
+    @Getter
     private static final Map<String, Object> beanMap = new HashMap<>();
 
+    @Getter
+    private static final Map<MappingInfo, HandlerMethod> handlerMap = new HashMap<>();
+
     static {
-        // properties
-        AppProperties appProperties = new AppProperties(new Properties());
-        registerBean("appProperties", appProperties);
+        // Container
+        ContainerService containerService =
+                registerBean(ContainerServiceImpl.class.getName(),
+                        new ContainerServiceImpl(), ContainerService.class);
+
+        // App properties
+        AppProperties appProperties = registerBean(AppProperties.class.getName(),
+                new AppProperties(new Properties()), AppProperties.class);
 
         // datasource
         DataSourceFactory dataSourceFactory = new HikariDataSourceFactory(appProperties);
-        DataSource dataSource = dataSourceFactory.createDataSource();
+        DataSource dataSource = registerBean(HikariDataSourceFactory.class.getName(),
+                dataSourceFactory.createDataSource(), DataSource.class);
 
-        // transaction
-        ConnectionHolder connectionHolder = new ConnectionHolder(new ThreadLocal<>());
-        registerBean("connectionHolder", connectionHolder);
-        TransactionManager transactionManager = new DataSourceTransactionManager(dataSource,
-                connectionHolder);
-        registerBean("transactionManager", transactionManager);
+        // Transaction
+        ConnectionHolder connectionHolder =
+                registerBean(ConnectionHolder.class.getName(),
+                        new ConnectionHolder(new ThreadLocal<>()), ConnectionHolder.class);
 
-        // dao
-        OrderDao orderDao = new JdbcOrderDao(connectionHolder);
-        registerBean("orderDao", orderDao);
-        OrderMapper orderMapper = new OrderMapper();
-        registerBean("orderMapper", orderMapper);
+        TransactionManager transactionManager =
+                registerBean(TransactionManager.class.getName(),
+                        new DataSourceTransactionManager(dataSource, connectionHolder),
+                        TransactionManager.class);
+        // Log
+        LogContext logContext =
+                registerBean(LogContext.class.getName(), new LogContext(), LogContext.class);
 
-        // sftp
-        SftpClient sftpClient = new JSchSftpClient();
-        SftpSender sftpSender = new JSchSftpSender(sftpClient, orderMapper, appProperties);
+        // Exception
+        RestApiExceptionHandler restApiExceptionHandler =
+                registerBean(RestApiExceptionHandler.class.getName(),
+                        new RestApiExceptionHandler(), RestApiExceptionHandler.class);
 
-        // order service
-        OrderService orderService = new OrderService(orderDao, orderMapper, appProperties,
-                sftpSender);
-        OrderService orderServiceProxy = TransactionProxyGenerator.getProxy(OrderService.class,
-                new TransactionInterceptor(orderService, transactionManager));
-        registerBean("orderService", orderServiceProxy);
+        // HTTP REQ & RES
+        HttpResponseSender httpResponseSender =
+                registerBean(HttpResponseSender.class.getName(),
+                        new HttpResponseSender(), HttpResponseSender.class);
 
-        // order controller
-        OrderXmlParse orderXmlParse = new OrderXmlParse();
-        registerBean("orderXmlParse", orderXmlParse);
-        OrderController orderController = new OrderController(orderServiceProxy, orderXmlParse);
-        registerBean("orderController", orderController);
+        HttpRequestParser httpRequestParser =
+                registerBean(HttpRequestParser.class.getName(),
+                        new HttpRequestParser(), HttpRequestParser.class);
 
-        // objectMapper
-        ObjectMapper objectMapper = new ObjectMapper();
-        registerBean("objectMapper", objectMapper);
+        // Handler mapping
+        HandlerMapping handlerMapping =
+                registerBean(HandlerMapping.class.getName(),
+                        new HandlerMapping(containerService),
+                        HandlerMapping.class);
 
-        // exception
-        RestApiExceptionHandler restApiExceptionHandler = new RestApiExceptionHandler();
-        registerBean("restApiExceptionHandler", restApiExceptionHandler);
+        // Front interceptor
+        FrontInterceptor loggingInterceptor = registerBean(LoggingFrontInterceptor.class.getName(),
+                new LoggingFrontInterceptor(), FrontInterceptor.class);
 
-        // interceptor 관련
-        List<HandlerInterceptor> interceptorList = new ArrayList<>();
-        interceptorList.add(new ValidationInterceptor());
-        registerBean("interceptorList", interceptorList);
+        FrontInterceptor validationInterceptor = registerBean(
+                ValidationFrontInterceptor.class.getName(), new ValidationFrontInterceptor(),
+                FrontInterceptor.class);
 
-        // httpServer 관련
-        HttpRequestParser httpRequestParser = new HttpRequestParser();
-        registerBean("httpRequestParser", httpRequestParser);
+        // Handler adaptor
+        HandlerAdaptor handlerAdaptor =
+                registerBean(HandlerAdaptor.class.getName(),
+                        new HandlerAdaptor(), HandlerAdaptor.class);
 
-        HttpResponseSender httpResponseSender = new HttpResponseSender();
-        registerBean("httpResponseSender", httpResponseSender);
+        // Front Controller
+        FrontController frontController =
+                registerBean(FrontController.class.getName(),
+                        new FrontController(restApiExceptionHandler, httpResponseSender,
+                                handlerMapping, handlerAdaptor, containerService),
+                        FrontController.class);
+        // server
+        HttpConnection connection = registerBean(Http11Connection.class.getName(),
+                new Http11Connection(frontController, httpRequestParser,
+                        httpResponseSender, restApiExceptionHandler), HttpConnection.class);
 
-        HandlerMapping handlerMapping = new HandlerMapping(new HashMap<>(), beanMap);
-        registerBean("handlerMapping", handlerMapping);
+        // DAO
+        OrderDao orderDao
+                = registerBean(JdbcOrderDao.class.getName(), new JdbcOrderDao(connectionHolder),
+                OrderDao.class);
 
-        HandlerAdaptor handlerAdaptor = new HandlerAdaptor();
-        registerBean("handlerAdaptor", handlerAdaptor);
+        // OrderMapper
+        OrderMapper orderMapper =
+                registerBean(OrderMapper.class.getName(), new OrderMapper(logContext),
+                        OrderMapper.class);
 
-        FrontController frontController = new FrontController(restApiExceptionHandler,
-                interceptorList, httpResponseSender, handlerMapping, handlerAdaptor);
-        registerBean("frontController", frontController);
+        // SFTP
+        SftpClient sftpClient =
+                registerBean(JSchSftpClient.class.getName(), new JSchSftpClient(),
+                        SftpClient.class);
 
+        SftpSender sftpSender =
+                registerBean(JSchSftpSender.class.getName(),
+                        new JSchSftpSender(sftpClient, orderMapper, appProperties),
+                        SftpSender.class);
+
+        // Service
+        OrderService orderService =
+                registerBean(OrderService.class.getName(),
+                        new OrderService(orderDao, orderMapper, appProperties, sftpSender),
+                        OrderService.class);
+
+        // Controller
+        OrderXmlParse orderXmlParse =
+                registerBean(OrderXmlParse.class.getName(), new OrderXmlParse(),
+                        OrderXmlParse.class);
+
+        OrderController orderController =
+                registerBean(OrderController.class.getName(),
+                        new OrderController(orderService, orderXmlParse), OrderController.class);
     }
 
 
-    public static <T> T getBean(String beanId, Class<T> clazz) {
-        return clazz.cast(beanMap.get(beanId));
+    private static <T> T registerBean(String beanId, Object bean, Class<T> clazz) {
+        Object proxiedBean = createProxyBean(bean);
+        beanMap.put(beanId, proxiedBean);
+        return clazz.cast(proxiedBean);
     }
 
-    public static void registerBean(String beanId, Object bean) {
-        beanMap.put(beanId, bean);
+    private static Object createProxyBean(Object bean) {
+        Object proxy = bean;
+        Class<?> clazz = bean.getClass();
+        if (hasMethodAnnotation(clazz, Transactional.class)) {
+            TransactionManager transactionManager =
+                    (TransactionManager) beanMap.get(TransactionManager.class.getName());
+            proxy = ProxyGenerator.getProxy(clazz,
+                    new TransactionInterceptor(proxy, transactionManager));
+
+        }
+        if (hasMethodAnnotation(clazz, LogExecution.class)) {
+            LogContext logContext = (LogContext) beanMap.get(LogContext.class.getName());
+            proxy = ProxyGenerator.getProxy(clazz, new LoggingInterceptor(proxy, logContext));
+
+        }
+        return proxy;
     }
 
-    public static Map<String, Object> getAllBean() {
-        return beanMap;
+    private static boolean hasMethodAnnotation(Class<?> clazz,
+            Class<? extends Annotation> annotationClass) {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(annotationClass)) {
+                return true;
+            }
+        }
+        return false;
     }
+
+
 }

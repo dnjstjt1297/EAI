@@ -3,19 +3,23 @@ package main.java.global.httpserver.handler;
 import java.lang.reflect.Method;
 import java.util.Map;
 import lombok.AllArgsConstructor;
+import main.java.global.container.ContainerService;
 import main.java.global.httpserver.dto.MappingInfo;
 import main.java.global.httpserver.enums.HttpMethod;
+import main.java.global.proxy.ProxyWrapper;
+import net.sf.cglib.proxy.Factory;
 
 @AllArgsConstructor
 public class HandlerMapping {
 
-    private final Map<MappingInfo, HandlerMethod> handlerMap;
-    private final Map<String, Object> beanMap;
+    private final ContainerService containerService;
 
     public void init() {
+        Map<MappingInfo, HandlerMethod> handlerMap = containerService.getHandlerMap();
+        Map<String, Object> beanMap = containerService.getBeanMap();
 
         for (Object bean : beanMap.values()) {
-            Class<?> clazz = bean.getClass();
+            Class<?> clazz = getTargetClass(bean);
 
             if (clazz.isAnnotationPresent(RestController.class)) {
                 Method[] methods = clazz.getDeclaredMethods();
@@ -38,7 +42,20 @@ public class HandlerMapping {
     }
 
     public Object getHandler(MappingInfo mappingInfo) {
-        return handlerMap.get(mappingInfo);
+        return containerService.getHandlerMap().get(mappingInfo);
+    }
+
+    public static Class<?> getTargetClass(Object bean) {
+
+        while (bean instanceof Factory factory) {
+            Object callback = factory.getCallback(0);
+            if (callback instanceof ProxyWrapper wrapper) {
+                bean = wrapper.getTarget();
+            } else {
+                break;
+            }
+        }
+        return bean.getClass();
     }
 
 }

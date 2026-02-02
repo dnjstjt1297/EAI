@@ -1,4 +1,4 @@
-package main.java.global.transaction;
+package main.java.global.proxy;
 
 import net.sf.cglib.proxy.Callback;
 import net.sf.cglib.proxy.Enhancer;
@@ -7,7 +7,7 @@ import net.sf.cglib.proxy.MethodInterceptor;
 import org.objenesis.Objenesis;
 import org.objenesis.ObjenesisStd;
 
-public class TransactionProxyGenerator {
+public class ProxyGenerator {
 
     private static final Objenesis objenesis = new ObjenesisStd();
 
