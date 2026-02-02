@@ -9,6 +9,7 @@ import java.util.List;
 import lombok.AllArgsConstructor;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.errorcode.enums.OrderErrorCode;
+import main.java.global.logging.annotation.LogExecution;
 import main.java.global.transaction.holder.ConnectionHolder;
 import main.java.order.dto.OrderDto;
 
@@ -22,6 +23,7 @@ public class JdbcOrderDao implements OrderDao {
 
 
     @Override
+    @LogExecution
     public void saveOrders(List<OrderDto> orderDtos, String lastOrderId, String applicantKey) {
 
         String sql = """
@@ -58,6 +60,7 @@ public class JdbcOrderDao implements OrderDao {
     }
 
     @Override
+    @LogExecution
     public String findLastOrderId(String applicantKey) {
 
         String sql = "SELECT ORDER_ID FROM ORDER_TB WHERE APPLICANT_KEY = ? ORDER BY ORDER_ID DESC LIMIT 1";

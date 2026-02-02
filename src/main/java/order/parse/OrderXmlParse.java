@@ -8,11 +8,13 @@ import javax.xml.bind.UnmarshalException;
 import javax.xml.bind.Unmarshaller;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.errorcode.enums.OrderErrorCode;
+import main.java.global.logging.annotation.LogExecution;
 import main.java.order.dto.request.OrderRequest;
 import org.xml.sax.SAXParseException;
 
 public class OrderXmlParse {
 
+    @LogExecution
     public OrderRequest parseOrderXml(String xml) {
         try {
             if (xml == null || xml.isEmpty()) {

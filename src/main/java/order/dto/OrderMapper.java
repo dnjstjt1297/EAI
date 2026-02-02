@@ -1,12 +1,24 @@
 package main.java.order.dto;
 
+
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import lombok.AllArgsConstructor;
+import main.java.global.exception.RestApiException;
+import main.java.global.exception.errorcode.enums.OrderErrorCode;
+import main.java.global.logging.LogContext;
+import main.java.global.logging.annotation.LogExecution;
 import main.java.order.dto.request.OrderRequest;
 import main.java.order.dto.request.OrderRequest.Header;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+@AllArgsConstructor
 public class OrderMapper {
+
+    private final LogContext logContext;
+    private static final Logger log = LoggerFactory.getLogger(OrderMapper.class);
 
     public String listToFlatFormat(List<OrderDto> orderDtos, String applicationKey) {
         StringBuilder sb = new StringBuilder();
@@ -22,6 +34,7 @@ public class OrderMapper {
         return sb.toString();
     }
 
+    @LogExecution
     public List<OrderDto> toOrderDtos(OrderRequest orderRequest) {
 
         Map<String, Header> headerMap = orderRequest.getHeaders().stream()
@@ -29,8 +42,7 @@ public class OrderMapper {
                         Header::getUserId,
                         header -> header,
                         (existing, replacement) -> {
-                            System.err.println("중복 헤더 발견: " + existing.getUserId());
-                            return existing;
+                            throw new RestApiException(OrderErrorCode.DUPLICATED_HEADER_USER_ID);
                         }
                 ));
 
@@ -38,8 +50,8 @@ public class OrderMapper {
                 .filter(item -> {
                     boolean exists = headerMap.containsKey(item.getUserId());
                     if (!exists) {
-                        //todo 로그
-                        System.err.println("주문자를 찾을 수 없습니다.: " + item.getUserId() + "는 스킵 되었습니다.");
+                        log.warn("{} [SKIP] 주문자를 찾을 수 없습니다. {}의 {} 스킵",
+                                logContext.getIndent(), item.getUserId(), item.getItemId());
                     }
                     return exists;
                 })

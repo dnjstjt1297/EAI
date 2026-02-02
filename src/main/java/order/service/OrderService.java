@@ -5,6 +5,7 @@ import java.util.Optional;
 import lombok.AllArgsConstructor;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.errorcode.enums.CommonErrorCode;
+import main.java.global.logging.annotation.LogExecution;
 import main.java.global.properties.AppProperties;
 import main.java.global.transaction.annotation.Transactional;
 import main.java.order.dao.OrderDao;
@@ -24,11 +25,11 @@ public class OrderService {
     private final AppProperties properties;
     private final SftpSender sftpSender;
 
+    @LogExecution
     @Transactional
     public OrderResponse order(OrderRequest orderRequest) {
 
         List<OrderDto> orderDtos = orderMapper.toOrderDtos(orderRequest);
-
         // DB 적재
         String applicantKey = Optional.ofNullable(properties.getProperty(APPLICANT_KEY))
                 .filter(key -> !key.trim().isEmpty())

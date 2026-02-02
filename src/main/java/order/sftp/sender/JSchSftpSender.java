@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.errorcode.enums.CommonErrorCode;
 import main.java.global.exception.errorcode.enums.OrderErrorCode;
+import main.java.global.logging.annotation.LogExecution;
 import main.java.global.properties.AppProperties;
 import main.java.order.dto.OrderDto;
 import main.java.order.dto.OrderMapper;
@@ -28,6 +29,7 @@ public class JSchSftpSender implements SftpSender {
     private final AppProperties properties;
 
     @Override
+    @LogExecution
     public void upload(List<OrderDto> orderDtos, String applicationKey, String filepath) {
 
         validateProperties();
