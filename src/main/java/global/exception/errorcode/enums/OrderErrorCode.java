@@ -9,6 +9,7 @@ import main.java.global.httpserver.enums.HttpStatus;
 public enum OrderErrorCode implements ErrorCode {
     INVALID_XML(HttpStatus.BAD_REQUEST, "주문 XML이 형식이 맞지 않습니다."),
     NOTFOUND_XML(HttpStatus.NOT_FOUND, "주문 XML이 존재하지 않습니다."),
+    DUPLICATED_HEADER_USER_ID(HttpStatus.BAD_REQUEST, "HEADER_USER_ID가 중복입니다."),
     FAILED_PARSE_XML(HttpStatus.INTERNAL_SERVER_ERROR, "주문 XML 파싱을 실패했습니다."),
     INSERT_DATABASE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "주문 API DB 저장에 실패했습니다."),
     NOTFOUND_LAST_ORDER_ID(HttpStatus.NOT_FOUND, "주문 테이블의 마지막 기본 키 조회에 실패했습니다."),
