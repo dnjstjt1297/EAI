@@ -22,9 +22,13 @@ bin/
 /nbdist/
 /.nb-gradle/
 
-!**/src/main/resources/config.application
-!**/src/test/resources/testconfig.application
+**/src/main/resources/application.properties
+**/src/main/resources/sample.xml
+**/src/test/resources/application.properties
+**/logs
 
+.idea
+EAI.iml
 
 ### VS Code ###
 .vscode/
