@@ -1,4 +1,4 @@
-package main.java.global.httpserver.interceptor;
+package main.java.global.httpserver.frontinterceptor;
 
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.errorcode.enums.CommonErrorCode;
@@ -6,7 +6,7 @@ import main.java.global.httpserver.dto.request.HttpRequest;
 import main.java.global.httpserver.dto.response.HttpResponse;
 import main.java.order.controller.OrderController;
 
-public class ValidationInterceptor implements HandlerInterceptor {
+public class ValidationFrontInterceptor implements FrontInterceptor {
 
     private static final String CONTENT_TYPE = "Content-Type";
     private static final String APPLICATION_XML = "application/xml";
@@ -32,7 +32,7 @@ public class ValidationInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public boolean postHandle(HttpRequest request, HttpResponse response, Object handler)
+    public void postHandle(HttpRequest request, HttpResponse response, Object handler)
             throws Exception {
         if (handler instanceof OrderController) {
             if (!response.headers().containsKey(CONTENT_TYPE.toLowerCase()) ||
@@ -44,8 +44,11 @@ public class ValidationInterceptor implements HandlerInterceptor {
                 throw new RestApiException(CommonErrorCode.INTERNAL_SERVER_ERROR);
             }
         }
+    }
 
-        return true;
+    @Override
+    public void afterCompletion(HttpRequest request, HttpResponse response, Object handler,
+            Exception ex) throws Exception {
     }
 
 }
