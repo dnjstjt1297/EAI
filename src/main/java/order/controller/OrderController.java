@@ -7,6 +7,7 @@ import main.java.global.httpserver.enums.HttpMethod;
 import main.java.global.httpserver.enums.HttpStatus;
 import main.java.global.httpserver.handler.Mapping;
 import main.java.global.httpserver.handler.RestController;
+import main.java.global.logging.annotation.LogExecution;
 import main.java.order.dto.request.OrderRequest;
 import main.java.order.dto.response.OrderResponse;
 import main.java.order.parse.OrderXmlParse;
@@ -19,6 +20,7 @@ public class OrderController {
     private final OrderService orderService;
     private final OrderXmlParse orderXmlParse;
 
+    @LogExecution
     @Mapping(path = "/order", method = HttpMethod.POST)
     public HttpResponse order(HttpRequest request) {
 

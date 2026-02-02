@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.util.Optional;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.errorcode.enums.OrderErrorCode;
+import main.java.global.logging.annotation.LogExecution;
 
 public class JSchSftpClient implements SftpClient {
 
@@ -20,6 +21,7 @@ public class JSchSftpClient implements SftpClient {
     private Channel channel;
 
     @Override
+    @LogExecution
     public void connect(String host, int port, String username, String password) {
         JSch jsch = new JSch();
         try {
@@ -39,6 +41,7 @@ public class JSchSftpClient implements SftpClient {
     }
 
     @Override
+    @LogExecution
     public void load(String filePath, InputStream inputStream, String fileName) {
         ChannelSftp channelSftp = (ChannelSftp) channel;
         try {
@@ -52,6 +55,7 @@ public class JSchSftpClient implements SftpClient {
     }
 
     @Override
+    @LogExecution
     public void close() {
         Optional.ofNullable(channel)
                 .filter(Channel::isConnected)
