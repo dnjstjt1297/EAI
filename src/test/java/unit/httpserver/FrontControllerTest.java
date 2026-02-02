@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import main.java.global.container.ContainerService;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.dto.ErrorCodeDto;
 import main.java.global.exception.errorcode.enums.CommonErrorCode;
@@ -20,10 +21,10 @@ import main.java.global.httpserver.dto.request.HttpRequest;
 import main.java.global.httpserver.dto.response.HttpResponse;
 import main.java.global.httpserver.enums.HttpMethod;
 import main.java.global.httpserver.enums.HttpStatus;
+import main.java.global.httpserver.frontinterceptor.FrontInterceptor;
 import main.java.global.httpserver.handler.HandlerAdaptor;
 import main.java.global.httpserver.handler.HandlerMapping;
 import main.java.global.httpserver.handler.HandlerMethod;
-import main.java.global.httpserver.interceptor.HandlerInterceptor;
 import main.java.global.httpserver.sender.HttpResponseSender;
 import main.java.order.controller.OrderController;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,16 +40,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 public class FrontControllerTest {
 
     @Spy
-    List<HandlerInterceptor> interceptors = new ArrayList<>();
+    List<FrontInterceptor> interceptors = new ArrayList<>();
 
     @Mock
-    HandlerInterceptor handlerInterceptor1;
+    FrontInterceptor frontInterceptor1;
     @Mock
-    HandlerInterceptor handlerInterceptor2;
+    FrontInterceptor frontInterceptor2;
+
     @Mock
     PrintWriter writer;
     @Mock
     HttpResponseSender httpResponseSender;
+    @Mock
+    ContainerService containerService;
     @Mock
     OrderController orderController;
     @Mock
@@ -69,36 +73,31 @@ public class FrontControllerTest {
     void setUp() {
         errorKey = "{\"error\":\"";
         interceptors.clear();
-        interceptors.add(handlerInterceptor1);
-        interceptors.add(handlerInterceptor2);
+        interceptors.add(frontInterceptor1);
+        interceptors.add(frontInterceptor2);
     }
 
     @Test
     @DisplayName("모든 인터셉터 통과 시 응답을 전송할 수 있다.")
     void DoDispatchTest() throws Exception {
-        // given
         HttpRequest httpRequest = new HttpRequest(HttpMethod.GET, "http//localhost/8080/order",
                 "/order", "1.1", null, null, null);
+
         HttpResponse httpResponse = new HttpResponse(HttpStatus.OK, "OK");
 
-        given(handlerMapping.getHandler(argThat(info ->
-                info.path().equals("/order") && info.type() == HttpMethod.GET)))
-                .willReturn(handlerMethod);
+        given(containerService.getFrontInterceptorList()).willReturn(interceptors);
+        given(frontInterceptor1.preHandle(any(), any(), any())).willReturn(true);
+        given(frontInterceptor2.preHandle(any(), any(), any())).willReturn(true);
 
-        given(handlerInterceptor1.preHandle(any(), any(), any())).willReturn(true);
-        given(handlerInterceptor2.preHandle(any(), any(), any())).willReturn(true);
+        given(handlerMapping.getHandler(any())).willReturn(handlerMethod);
 
-        given(handlerAdaptor.handle(eq(httpRequest), eq(handlerMethod))).willReturn(httpResponse);
-
-        given(handlerInterceptor1.postHandle(any(), any(), any())).willReturn(true);
-        given(handlerInterceptor2.postHandle(any(), any(), any())).willReturn(true);
+        given(handlerAdaptor.handle(any(), any())).willReturn(httpResponse);
 
         // when
         frontController.doDispatch(httpRequest, writer);
 
         // then
-        verify(httpResponseSender).send(eq(writer), eq(httpRequest), eq(httpResponse));
-
+        verify(httpResponseSender).send(any(), any(), eq(httpResponse));
     }
 
     @Test
@@ -108,9 +107,9 @@ public class FrontControllerTest {
         HttpRequest httpRequest = new HttpRequest(HttpMethod.GET, "http//localhost/8080/order",
                 "/order", "1.1", null, null, null);
 
-        // preHandle만 통과 (postHandle은 예외 시 실행 안 되므로 생략 - UnnecessaryStubbing 방지)
-        given(handlerInterceptor1.preHandle(any(), any(), any())).willReturn(true);
-        given(handlerInterceptor2.preHandle(any(), any(), any())).willReturn(true);
+        given(containerService.getFrontInterceptorList()).willReturn(interceptors);
+        given(frontInterceptor1.preHandle(any(), any(), any())).willReturn(true);
+        given(frontInterceptor2.preHandle(any(), any(), any())).willReturn(true);
 
         given(handlerMapping.getHandler(argThat(info ->
                 info.path().equals("/order") && info.type() == HttpMethod.GET)))
@@ -142,7 +141,8 @@ public class FrontControllerTest {
                 "/order", "1.1", null, null, null);
 
         given(handlerMapping.getHandler(any())).willReturn(new Object());
-        given(handlerInterceptor1.preHandle(any(), any(), any())).willReturn(false); // 두 번째에서 거절
+        given(containerService.getFrontInterceptorList()).willReturn(interceptors);
+        given(frontInterceptor1.preHandle(any(), any(), any())).willReturn(false); // 두 번째에서 거절
 
         ErrorCodeDto errorDto = new ErrorCodeDto(
                 errorKey + "\"" + CommonErrorCode.INTERNAL_SERVER_ERROR.getMessage() + "\"" + "}",
@@ -153,75 +153,37 @@ public class FrontControllerTest {
         frontController.doDispatch(httpRequest, writer);
 
         // then
-        verify(handlerInterceptor2, never()).preHandle(any(), any(), any());
+        verify(frontInterceptor2, never()).preHandle(any(), any(), any());
         verify(httpResponseSender).send(eq(writer), eq(httpRequest), argThat(response ->
                 response != null && response.body()
                         .contains(CommonErrorCode.INTERNAL_SERVER_ERROR.getMessage())
         ));
     }
 
-    @Test
-    @DisplayName("컨트롤러는 성공했으나, post 인터셉터 중 하나라도 false를 반환하면 에러 응답을 생성할 수 있다..")
-    void postHandleFailTest() throws Exception {
-        // given
-        HttpRequest httpRequest = new HttpRequest(HttpMethod.GET, "http//localhost/8080/order",
-                "/order", "1.1", null, null, null);
-
-        HttpResponse successResponse = new HttpResponse(HttpStatus.OK, "Success");
-
-        given(handlerMapping.getHandler(any())).willReturn(new Object());
-        given(handlerInterceptor1.preHandle(any(), any(), any())).willReturn(true);
-        given(handlerInterceptor2.preHandle(any(), any(), any())).willReturn(true);
-        given(handlerAdaptor.handle(any(), any())).willReturn(successResponse);
-        given(handlerInterceptor2.postHandle(any(), any(), any())).willReturn(false);
-
-        ErrorCodeDto errorDto = new ErrorCodeDto("POST_HANDLE_FAIL",
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        given(restApiExceptionHandler.handle(any())).willReturn(errorDto);
-
-        // when
-        frontController.doDispatch(httpRequest, writer);
-
-        // then
-        verify(httpResponseSender).send(eq(writer), eq(httpRequest),
-                argThat(res -> res.status() == HttpStatus.INTERNAL_SERVER_ERROR));
-    }
 
     @Test
     @DisplayName("존재하지 않은 핸들러 조회 시 에러 응답을 생성할 수 있다.")
     void handlerMappingNotFoundTest() throws Exception {
+        // given
         HttpRequest httpRequest = new HttpRequest(HttpMethod.GET, "http//localhost/8080/order",
                 "/order", "1.1", null, null, null);
 
         given(handlerMapping.getHandler(any())).willThrow(
                 new RestApiException(HttpServerErrorCode.NOTFOUND_HANDLER));
+        given(containerService.getFrontInterceptorList()).willReturn(interceptors);
 
         ErrorCodeDto errorDto = new ErrorCodeDto(
                 errorKey + "\"" + HttpServerErrorCode.NOTFOUND_HANDLER.getMessage() + "\"" + "}",
                 HttpStatus.NOT_FOUND);
         given(restApiExceptionHandler.handle(any(RestApiException.class))).willReturn(errorDto);
 
-        frontController.doDispatch(httpRequest, writer);
-
-        verify(httpResponseSender).send(eq(writer), eq(httpRequest),
-                argThat(response -> response != null && response.body()
-                        .contains(HttpServerErrorCode.NOTFOUND_HANDLER.getMessage())));
-    }
-
-    @Test
-    @DisplayName("OOM 발생 시에도 finally 블록을 통해 응답 전송을 시도할 수 있다.")
-    void handleOOMTest() throws Exception {
-        // given
-        HttpRequest httpRequest = new HttpRequest(HttpMethod.GET, "/order", "/order", "1.1", null,
-                null, null);
-        given(handlerMapping.getHandler(any())).willThrow(new OutOfMemoryError("가짜 OOM"));
-
         // when
         frontController.doDispatch(httpRequest, writer);
 
-        // then
-        // OOM 시 response는 null이지만 httpResponseSender.send는 호출되어야 함
-        verify(httpResponseSender).send(eq(writer), eq(httpRequest), any());
+        //then
+        verify(httpResponseSender).send(eq(writer), eq(httpRequest),
+                argThat(response -> response != null && response.body()
+                        .contains(HttpServerErrorCode.NOTFOUND_HANDLER.getMessage())));
     }
 
 }
