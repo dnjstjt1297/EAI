@@ -83,9 +83,8 @@ CGLib 프록시를 구현하여 어노테이션만으로 로깅과 트랜잭션�
  
 
 ## 6. 결과
-**1. Rest API Process**
-- 주문(Rest) 요청
-XML 예
+### 1. Rest API Process**
+- 주문 XML 및 CURL 예
 ```xml
 <HEADER>
     <USER_ID>USER1</USER_ID>
@@ -117,7 +116,6 @@ XML 예
 </ITEM>
 > 
 ```
-Curl REQ
 ```Shell
  curl -X POST http://localhost:8080/order \  
      -H "Content-Type: application/xml" \
@@ -125,26 +123,26 @@ Curl REQ
      --data-binary "@[XML 파일 경로]" \
      -v
 ```
-**<DB 저장>**
+- DB 저장
 
 <img width="500" height="300" alt="image" src="https://github.com/user-attachments/assets/d6287439-675e-4262-8fa7-424a955a1b3b" />
 
-**<SFTP 전송>**
+- SFTP 전송
 
 <img width="500" height="600" alt="image" src="https://github.com/user-attachments/assets/d828b21c-e958-472b-b3ce-6e54b812a5a2" />
 
-**2.Scheduler**
+### 2.Scheduler Process**
 
-<SHIPMENT_TB>
+- SHIPMENT_TB
   
 <img width="500" height="300" alt="image" src="https://github.com/user-attachments/assets/0fafd1a8-5a9d-4877-abf0-af24033f496d" />
 
   
-<ORDER_TB>
+- ORDER_TB
 
 <img width="500" height="300" alt="image" src="https://github.com/user-attachments/assets/dade11fd-6902-4a62-bdbb-d89b13b0cab3" />
 
-**Logging**
+### 3. Logging
 
 <img width="500" height="300" alt="image" src="https://github.com/user-attachments/assets/f7fa39b0-244d-46ed-a494-e57a0ee68409" />
 
