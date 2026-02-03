@@ -16,6 +16,8 @@ import main.java.global.httpserver.frontinterceptor.FrontInterceptor;
 import main.java.global.httpserver.handler.HandlerAdaptor;
 import main.java.global.httpserver.handler.HandlerMapping;
 import main.java.global.httpserver.sender.HttpResponseSender;
+import main.java.global.logging.LogContext;
+import main.java.global.logging.annotation.LogExecution;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +35,9 @@ public class FrontController {
     private final HandlerAdaptor handlerAdaptor;
     private final ContainerService containerService;
     private static final Logger log = LoggerFactory.getLogger(FrontController.class);
+    private final LogContext logContext;
 
+    @LogExecution
     public void doDispatch(HttpRequest request, PrintWriter writer) throws Exception {
         HttpResponse response = null;
         HttpStatus status;
@@ -73,6 +77,8 @@ public class FrontController {
             ErrorCodeDto errorCodeDto = restApiExceptionHandler.handle(e);
             status = errorCodeDto.status();
             response = new HttpResponse(status, errorCodeDto.message());
+            log.error("{}[ERROR] path: {}, message: {}", logContext.getIndent(), request.path(),
+                    e.getMessage());
         } finally {
             httpResponseSender.send(writer, request, response);
             triggerAfterCompletion(interceptors, request, response, handler, exception);
@@ -86,7 +92,8 @@ public class FrontController {
             try {
                 interceptors.get(i).afterCompletion(request, response, handler, exception);
             } catch (Exception e) {
-                log.error("[ERROR] path: {}, message: {}", request.path(), e.getMessage());
+                log.error("{}[ERROR] path: {}, message: {}", logContext.getIndent(), request.path(),
+                        e.getMessage());
             }
         }
     }

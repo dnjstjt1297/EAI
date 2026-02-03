@@ -133,7 +133,7 @@ public class Container {
         FrontController frontController =
                 registerBean(FrontController.class.getName(),
                         new FrontController(restApiExceptionHandler, httpResponseSender,
-                                handlerMapping, handlerAdaptor, containerService),
+                                handlerMapping, handlerAdaptor, containerService, logContext),
                         FrontController.class);
         // server
         HttpConnection connection = registerBean(Http11Connection.class.getName(),
