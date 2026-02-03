@@ -1,8 +1,9 @@
 package main.java.order.scheduler;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
-import main.java.global.exception.handler.SchedulerExceptionHandler;
+import main.java.global.logging.LogContext;
 import main.java.global.logging.annotation.LogExecution;
 import main.java.order.service.OrderService;
 import org.quartz.Job;
@@ -19,7 +20,6 @@ public class OrderJob implements Job {
     private static final Logger logger = LoggerFactory.getLogger(OrderJob.class);
 
     private final OrderService orderService;
-    private final SchedulerExceptionHandler schedulerExceptionHandler;
 
     @Override
     @LogExecution
@@ -28,7 +28,16 @@ public class OrderJob implements Job {
         try {
             orderService.shipmentUpload();
         } catch (Exception e) {
-            schedulerExceptionHandler.handle(jobExecutionContext, e);
+            exceptionHandle(jobExecutionContext, e);
         }
+    }
+
+    private void exceptionHandle(JobExecutionContext jobExecutionContext, Exception e) {
+        Exception exception = e;
+        while (exception instanceof InvocationTargetException ite) {
+            exception = (Exception) ite.getCause();
+        }
+        logger.error("{}[ERROR] jobExecutionContext: {}, Exception: ", LogContext.getIndent(),
+                jobExecutionContext, exception);
     }
 }

@@ -1,6 +1,5 @@
 package main.java.global.exception.handler;
 
-import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
 import lombok.NoArgsConstructor;
 import main.java.global.exception.RestApiException;
@@ -16,10 +15,6 @@ public class RestApiExceptionHandler {
     public ErrorCodeDto handle(Exception e) {
         ErrorCodeDto errorCodeDto;
         String message;
-
-        while (e instanceof InvocationTargetException ite) {
-            e = (Exception) ite.getTargetException();
-        }
 
         if (e instanceof RestApiException rae) {
             message = createErrorMessage(rae.getErrorCode().name(), rae.getMessage());

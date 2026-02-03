@@ -12,13 +12,19 @@ import java.util.Map;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.errorcode.enums.HttpServerErrorCode;
 import main.java.global.httpserver.dto.request.HttpRequest;
+import main.java.global.httpserver.enums.HttpHeader;
+import main.java.global.httpserver.enums.HttpLine;
 import main.java.global.httpserver.enums.HttpMethod;
+import main.java.global.logging.LogContext;
+import main.java.global.logging.annotation.LogExecution;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HttpRequestParser {
 
-    public static final String HEADER_CONTENT_LENGTH = "Content-Length";
-    public static final String VERSION = "1.1";
+    private static final Logger log = LoggerFactory.getLogger(HttpRequestParser.class);
 
+    @LogExecution
     public HttpRequest parse(InputStream inputStream) {
         try {
             String line = readLine(inputStream);
@@ -35,8 +41,11 @@ public class HttpRequestParser {
 
             String[] request = line.split("\\s+");
             if (request.length < 2) {
+                log.warn("{}[WARN] Malformed Request Line: {}", LogContext.getIndent(), line);
                 throw new RestApiException(HttpServerErrorCode.INVALID_REQUEST);
             }
+            log.debug("{}[DEBUG] HTTP Request: {} {}", LogContext.getIndent(), request[0],
+                    request[1]);
 
             HttpMethod method = HttpMethod.valueOf(request[0].toUpperCase());
             String url = request[1];
@@ -45,7 +54,8 @@ public class HttpRequestParser {
             Map<String, String> headers = parseHeaders(inputStream);
             String body = parseBody(inputStream, headers);
 
-            String version = (request.length >= 3) ? request[2].split("/")[1] : VERSION;
+            String version =
+                    (request.length >= 3) ? request[2].split("/")[1] : HttpLine.DEFAULT_VERSION;
 
             return new HttpRequest(method, url, path, version, params, headers, body);
 
@@ -53,6 +63,7 @@ public class HttpRequestParser {
             if (e instanceof RestApiException) {
                 throw (RestApiException) e;
             }
+            log.error("{}[ERROR] Unexpected error during HTTP parsing", LogContext.getIndent(), e);
             return null;
         }
     }
@@ -117,16 +128,17 @@ public class HttpRequestParser {
         while ((line = readLine(in)) != null && !line.isEmpty()) {
             String[] headerTokens = line.split(": ", 2);
             if (headerTokens.length == 2) {
-                String key = headerTokens[0].trim().toLowerCase();
-                String value = headerTokens[1].trim().toLowerCase();
-                headers.put(key, value);
+                headers.put(headerTokens[0].trim().toLowerCase(),
+                        headerTokens[1].trim().toLowerCase());
+            } else {
+                log.warn("{}[WARN] Invalid Header format: {}", LogContext.getIndent(), line);
             }
         }
         return headers;
     }
 
     private String parseBody(InputStream in, Map<String, String> headers) throws IOException {
-        String lengthStr = headers.get(HEADER_CONTENT_LENGTH.toLowerCase());
+        String lengthStr = headers.get(HttpHeader.CONTENT_LENGTH.getValue().toLowerCase());
         if (lengthStr == null || lengthStr.isEmpty()) {
             return "";
         }

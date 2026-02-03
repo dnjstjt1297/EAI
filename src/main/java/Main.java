@@ -23,12 +23,7 @@ public class Main {
         OrderSchedulerService quartzOrderSchedulerService = (OrderSchedulerService) containerService.getBean(
                 QuartzOrderSchedulerService.class.getName());
 
-        try {
-            quartzOrderSchedulerService.start();
-        } catch (Exception e) {
-            log.error("[ERROR] Scheduler start failure.");
-            quartzOrderSchedulerService.stop();
-        }
+        quartzOrderSchedulerService.start();
 
         HttpConnection connection = (HttpConnection) containerService.getBean(
                 Http11Connection.class.getName());

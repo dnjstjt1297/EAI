@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 public class LoggingInterceptor implements MethodInterceptor, ProxyWrapper {
 
     private final Object target;
-    private final LogContext logContext;
     private static final Logger log = LoggerFactory.getLogger(LoggingInterceptor.class);
 
     @Override
@@ -24,18 +23,18 @@ public class LoggingInterceptor implements MethodInterceptor, ProxyWrapper {
         if (method.isAnnotationPresent(LogExecution.class)) {
             LogExecution logExecution = method.getAnnotation(LogExecution.class);
 
-            String indent = logContext.getIndent();
+            String indent = LogContext.getIndent();
             String className = target.getClass().getSimpleName();
 
             log.info("{}[INFO] START: {}.{}()", indent, className, method.getName());
 
-            logContext.increment();
+            LogContext.increment();
 
             long startTime = System.nanoTime();
             try {
 
                 Object result = method.invoke(target, args);
-                logContext.decrement();
+                LogContext.decrement();
 
                 log.info("{}[INFO] END: {}.{}() , Duration: {}ms", indent, className,
                         method.getName(), System.nanoTime() - startTime);
@@ -48,10 +47,10 @@ public class LoggingInterceptor implements MethodInterceptor, ProxyWrapper {
                     exception = (Exception) ite.getTargetException();
                 }
 
-                logContext.decrement();
-                log.error("{}[ERROR] END: {}.{}() , Exception: {} , Duration: {}ms \n",
+                LogContext.decrement();
+                log.error("{}[ERROR] END: {}.{}() , Exception: {} , Duration: {}ms",
                         indent, className, method.getName(), exception.getMessage(),
-                        System.nanoTime() - startTime, e);
+                        System.nanoTime() - startTime);
                 throw exception;
             }
         }

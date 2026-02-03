@@ -1,6 +1,7 @@
 package main.java.global.httpserver;
 
 import java.io.PrintWriter;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import main.java.global.container.ContainerService;
@@ -35,7 +36,6 @@ public class FrontController {
     private final HandlerAdaptor handlerAdaptor;
     private final ContainerService containerService;
     private static final Logger log = LoggerFactory.getLogger(FrontController.class);
-    private final LogContext logContext;
 
     @LogExecution
     public void doDispatch(HttpRequest request, PrintWriter writer) throws Exception {
@@ -56,11 +56,9 @@ public class FrontController {
             }
 
             // 인터셉터 전 처리
-            {
-                for (FrontInterceptor interceptor : interceptors) {
-                    if (!interceptor.preHandle(request, response, handler)) {
-                        throw new RestApiException(HttpServerErrorCode.INVALID_INTERCEPTOR);
-                    }
+            for (FrontInterceptor interceptor : interceptors) {
+                if (!interceptor.preHandle(request, response, handler)) {
+                    throw new RestApiException(HttpServerErrorCode.INVALID_INTERCEPTOR);
                 }
             }
 
@@ -71,18 +69,25 @@ public class FrontController {
             for (int i = interceptors.size() - 1; i >= 0; i--) {
                 interceptors.get(i).postHandle(request, response, handler);
             }
-
-        } catch (Exception e) {
-            exception = e;
-            ErrorCodeDto errorCodeDto = restApiExceptionHandler.handle(e);
-            status = errorCodeDto.status();
-            response = new HttpResponse(status, errorCodeDto.message());
-            log.error("{}[ERROR] path: {}, message: {}", logContext.getIndent(), request.path(),
-                    e.getMessage());
-        } finally {
             httpResponseSender.send(writer, request, response);
+        } catch (Exception e) {
+            exceptionHandle(writer, request, e);
+        } finally {
             triggerAfterCompletion(interceptors, request, response, handler, exception);
         }
+    }
+
+    private void exceptionHandle(PrintWriter writer, HttpRequest request, Exception e) {
+        // ExceptionHandler를 통해 에러 응답 하기
+        Exception exception = e;
+        while (exception instanceof InvocationTargetException ite) {
+            exception = (Exception) ite.getTargetException();
+        }
+        log.error("{}[ERROR] path: {}, Exception: ", LogContext.getIndent(), request.path(),
+                exception);
+        ErrorCodeDto errorCodeDto = restApiExceptionHandler.handle(exception);
+        HttpResponse response = new HttpResponse(errorCodeDto.status(), errorCodeDto.message());
+        httpResponseSender.send(writer, request, response);
     }
 
     private void triggerAfterCompletion(List<FrontInterceptor> interceptors,
@@ -92,7 +97,7 @@ public class FrontController {
             try {
                 interceptors.get(i).afterCompletion(request, response, handler, exception);
             } catch (Exception e) {
-                log.error("{}[ERROR] path: {}, message: {}", logContext.getIndent(), request.path(),
+                log.error("{}[ERROR] path: {}, message: {}", LogContext.getIndent(), request.path(),
                         e.getMessage());
             }
         }

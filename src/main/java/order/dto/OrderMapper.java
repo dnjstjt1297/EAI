@@ -18,7 +18,6 @@ import org.slf4j.LoggerFactory;
 @AllArgsConstructor
 public class OrderMapper {
 
-    private final LogContext logContext;
     private static final Logger log = LoggerFactory.getLogger(OrderMapper.class);
 
     public String listToFlatFormat(List<OrderDto> orderDtos, String applicationKey) {
@@ -52,7 +51,7 @@ public class OrderMapper {
                     boolean exists = headerMap.containsKey(item.getUserId());
                     if (!exists) {
                         log.warn("{} [WARM] 존재하지 않는 주문자, {}의 {} 스킵",
-                                logContext.getIndent(), item.getUserId(), item.getItemId());
+                                LogContext.getIndent(), item.getUserId(), item.getItemId());
                     }
                     return exists;
                 })

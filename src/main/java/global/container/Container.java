@@ -22,7 +22,6 @@ import main.java.global.httpserver.handler.HandlerMapping;
 import main.java.global.httpserver.handler.HandlerMethod;
 import main.java.global.httpserver.parser.HttpRequestParser;
 import main.java.global.httpserver.sender.HttpResponseSender;
-import main.java.global.logging.LogContext;
 import main.java.global.logging.annotation.LogExecution;
 import main.java.global.logging.interceptor.LoggingInterceptor;
 import main.java.global.properties.AppProperties;
@@ -88,9 +87,6 @@ public class Container {
                 registerBean(TransactionManager.class.getName(),
                         new DataSourceTransactionManager(dataSource, connectionHolder),
                         TransactionManager.class);
-        // Log
-        LogContext logContext =
-                registerBean(LogContext.class.getName(), new LogContext(), LogContext.class);
 
         // Exception
         RestApiExceptionHandler restApiExceptionHandler =
@@ -133,7 +129,7 @@ public class Container {
         FrontController frontController =
                 registerBean(FrontController.class.getName(),
                         new FrontController(restApiExceptionHandler, httpResponseSender,
-                                handlerMapping, handlerAdaptor, containerService, logContext),
+                                handlerMapping, handlerAdaptor, containerService),
                         FrontController.class);
         // server
         HttpConnection connection = registerBean(Http11Connection.class.getName(),
@@ -151,7 +147,7 @@ public class Container {
 
         // OrderMapper
         OrderMapper orderMapper =
-                registerBean(OrderMapper.class.getName(), new OrderMapper(logContext),
+                registerBean(OrderMapper.class.getName(), new OrderMapper(),
                         OrderMapper.class);
 
         // SFTP
@@ -183,7 +179,7 @@ public class Container {
         // Scheduler
         OrderJob orderJob =
                 registerBean(OrderJob.class.getName(),
-                        new OrderJob(orderService, schedulerExceptionHandler), OrderJob.class);
+                        new OrderJob(orderService), OrderJob.class);
 
         OrderJobFactory orderJobFactory =
                 registerBean(OrderJobFactory.class.getName(), new OrderJobFactory(orderJob),
@@ -214,8 +210,7 @@ public class Container {
 
         }
         if (hasMethodAnnotation(clazz, LogExecution.class)) {
-            LogContext logContext = (LogContext) beanMap.get(LogContext.class.getName());
-            proxy = ProxyGenerator.getProxy(clazz, new LoggingInterceptor(proxy, logContext));
+            proxy = ProxyGenerator.getProxy(clazz, new LoggingInterceptor(proxy));
 
         }
         return proxy;

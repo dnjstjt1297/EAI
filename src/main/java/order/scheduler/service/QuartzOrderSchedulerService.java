@@ -11,6 +11,8 @@ import org.quartz.SchedulerException;
 import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.quartz.impl.StdSchedulerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class QuartzOrderSchedulerService implements OrderSchedulerService {
@@ -19,7 +21,8 @@ public class QuartzOrderSchedulerService implements OrderSchedulerService {
     private static final String JOB_GROUP = "SHIPMENT_GROUP";
     private static final String TRIGGER_NAME = "SHIPMENT_UPDATE";
     private static final String TRIGGER_GROUP = "SHIPMENT_GROUP";
-    private static final String CRON_EXPRESSION = "0 0/5 * * * ?";
+    private static final String CRON_EXPRESSION = "0 0/1 * * * ?";
+    private static final Logger log = LoggerFactory.getLogger(QuartzOrderSchedulerService.class);
 
     private Scheduler scheduler;
 
@@ -52,7 +55,7 @@ public class QuartzOrderSchedulerService implements OrderSchedulerService {
             }
 
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            stop();
         }
     }
 
@@ -64,7 +67,7 @@ public class QuartzOrderSchedulerService implements OrderSchedulerService {
                 scheduler.shutdown(true);
             }
         } catch (SchedulerException e) {
-            throw new RuntimeException(e);
+            log.error("[ERROR] Scheduler Exception: {}", e.getMessage());
         }
     }
 
