@@ -9,6 +9,7 @@ import javax.sql.DataSource;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import main.java.global.exception.handler.RestApiExceptionHandler;
+import main.java.global.exception.handler.SchedulerExceptionHandler;
 import main.java.global.httpserver.FrontController;
 import main.java.global.httpserver.connection.Http11Connection;
 import main.java.global.httpserver.connection.HttpConnection;
@@ -33,11 +34,17 @@ import main.java.global.transaction.manager.DataSourceTransactionManager;
 import main.java.global.transaction.manager.TransactionManager;
 import main.java.order.controller.OrderController;
 import main.java.order.dao.JdbcOrderDao;
+import main.java.order.dao.JdbcShipmentDao;
 import main.java.order.dao.OrderDao;
+import main.java.order.dao.ShipmentDao;
 import main.java.order.dao.datasource.DataSourceFactory;
 import main.java.order.dao.datasource.HikariDataSourceFactory;
 import main.java.order.dto.OrderMapper;
 import main.java.order.parse.OrderXmlParse;
+import main.java.order.scheduler.OrderJob;
+import main.java.order.scheduler.OrderJobFactory;
+import main.java.order.scheduler.service.OrderSchedulerService;
+import main.java.order.scheduler.service.QuartzOrderSchedulerService;
 import main.java.order.service.OrderService;
 import main.java.order.sftp.client.JSchSftpClient;
 import main.java.order.sftp.client.SftpClient;
@@ -90,6 +97,10 @@ public class Container {
                 registerBean(RestApiExceptionHandler.class.getName(),
                         new RestApiExceptionHandler(), RestApiExceptionHandler.class);
 
+        SchedulerExceptionHandler schedulerExceptionHandler =
+                registerBean(SchedulerExceptionHandler.class.getName(),
+                        new SchedulerExceptionHandler(), SchedulerExceptionHandler.class);
+
         // HTTP REQ & RES
         HttpResponseSender httpResponseSender =
                 registerBean(HttpResponseSender.class.getName(),
@@ -133,6 +144,10 @@ public class Container {
         OrderDao orderDao
                 = registerBean(JdbcOrderDao.class.getName(), new JdbcOrderDao(connectionHolder),
                 OrderDao.class);
+        ShipmentDao shipmentDao
+                = registerBean(JdbcShipmentDao.class.getName(),
+                new JdbcShipmentDao(connectionHolder),
+                ShipmentDao.class);
 
         // OrderMapper
         OrderMapper orderMapper =
@@ -152,7 +167,8 @@ public class Container {
         // Service
         OrderService orderService =
                 registerBean(OrderService.class.getName(),
-                        new OrderService(orderDao, orderMapper, appProperties, sftpSender),
+                        new OrderService(orderDao, shipmentDao,
+                                orderMapper, appProperties, sftpSender),
                         OrderService.class);
 
         // Controller
@@ -163,6 +179,21 @@ public class Container {
         OrderController orderController =
                 registerBean(OrderController.class.getName(),
                         new OrderController(orderService, orderXmlParse), OrderController.class);
+
+        // Scheduler
+        OrderJob orderJob =
+                registerBean(OrderJob.class.getName(),
+                        new OrderJob(orderService, schedulerExceptionHandler), OrderJob.class);
+
+        OrderJobFactory orderJobFactory =
+                registerBean(OrderJobFactory.class.getName(), new OrderJobFactory(orderJob),
+                        OrderJobFactory.class);
+
+        OrderSchedulerService orderSchedulerService =
+                registerBean(QuartzOrderSchedulerService.class.getName(),
+                        new QuartzOrderSchedulerService(orderJobFactory),
+                        OrderSchedulerService.class);
+
     }
 
 
