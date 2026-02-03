@@ -23,7 +23,7 @@ public class SchedulerExceptionHandler {
             log.error("[ERROR] Scheduler system failure | Job: {}.{} | Cause: DB 연결 불가",
                     groupName, jobName);
         } else {
-            log.warn("[ERROR] Scheduler system failure | Job: {} | message: {}",
+            log.warn("[WARM] Scheduler system failure | Job: {} | message: {}",
                     jobName, e.getMessage());
         }
     }
