@@ -66,9 +66,8 @@ public class Http11Connection implements HttpConnection {
 
         } catch (IOException e) {
             log.error("[FATAL] Server socket connection error");
-            System.exit(1);
-        } finally {
             threadPool.shutdown();
+            System.exit(1);
         }
     }
 
