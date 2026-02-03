@@ -1,6 +1,7 @@
 package main.java.global.exception.handler;
 
 import java.lang.reflect.InvocationTargetException;
+import java.sql.SQLException;
 import lombok.NoArgsConstructor;
 import main.java.global.exception.RestApiException;
 import main.java.global.exception.dto.ErrorCodeDto;
@@ -25,6 +26,11 @@ public class RestApiExceptionHandler {
             errorCodeDto = new ErrorCodeDto(message, rae.getErrorCode().getStatus());
 
         } else if (e instanceof IllegalArgumentException) {
+            message = createErrorMessage(CommonErrorCode.INVALID_PARAMETER.name(),
+                    CommonErrorCode.INVALID_PARAMETER.getMessage());
+            errorCodeDto = new ErrorCodeDto(message, CommonErrorCode.INVALID_PARAMETER.getStatus());
+
+        } else if (e instanceof SQLException) {
             message = createErrorMessage(CommonErrorCode.INVALID_PARAMETER.name(),
                     CommonErrorCode.INVALID_PARAMETER.getMessage());
             errorCodeDto = new ErrorCodeDto(message, CommonErrorCode.INVALID_PARAMETER.getStatus());
