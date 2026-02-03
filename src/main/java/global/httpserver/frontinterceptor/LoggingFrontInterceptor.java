@@ -16,7 +16,7 @@ public class LoggingFrontInterceptor implements FrontInterceptor {
     @Override
     public boolean preHandle(HttpRequest request, HttpResponse response, Object object)
             throws Exception {
-        startTime = System.currentTimeMillis();
+        startTime = System.nanoTime();
         String contentType = request.headers().getOrDefault(HEADER_CONNECTION.toLowerCase(), "");
         log.info("[INFO] REQUEST: {} {} , H-Connection: {}", request.method(), request.path(),
                 contentType);
@@ -31,7 +31,7 @@ public class LoggingFrontInterceptor implements FrontInterceptor {
     @Override
     public void afterCompletion(HttpRequest request, HttpResponse response, Object object,
             Exception ex) throws Exception {
-        Long duration = (startTime != null) ? System.currentTimeMillis() - startTime : 0;
+        Long duration = (startTime != null) ? System.nanoTime() - startTime : 0;
         log.info("[INFO] RESPONSE: {} | Time: {}ms", request.path(), duration);
     }
 }

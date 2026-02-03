@@ -31,14 +31,14 @@ public class LoggingInterceptor implements MethodInterceptor, ProxyWrapper {
 
             logContext.increment();
 
-            long startTime = System.currentTimeMillis();
+            long startTime = System.nanoTime();
             try {
 
                 Object result = method.invoke(target, args);
                 logContext.decrement();
 
                 log.info("{}[INFO] END: {}.{}() , Duration: {}ms", indent, className,
-                        method.getName(), System.currentTimeMillis() - startTime);
+                        method.getName(), System.nanoTime() - startTime);
                 return result;
             } catch (Exception e) {
 
@@ -49,9 +49,9 @@ public class LoggingInterceptor implements MethodInterceptor, ProxyWrapper {
                 }
 
                 logContext.decrement();
-                log.error("{}[ERROR] END: {}.{}() , Exception: {} , Duration: {}ms",
+                log.error("{}[ERROR] END: {}.{}() , Exception: {} , Duration: {}ms \n",
                         indent, className, method.getName(), exception.getMessage(),
-                        System.currentTimeMillis() - startTime);
+                        System.nanoTime() - startTime, e);
                 throw exception;
             }
         }
