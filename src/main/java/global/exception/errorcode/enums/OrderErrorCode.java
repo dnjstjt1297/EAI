@@ -17,7 +17,13 @@ public enum OrderErrorCode implements ErrorCode {
 
     FAILED_SFTP_BYTE(HttpStatus.INTERNAL_SERVER_ERROR, "바이트 파일로 변환에 실패하였습니다."),
     FAILED_SFTP_LOAD(HttpStatus.INTERNAL_SERVER_ERROR, "파일 전송에 실패하였습니다."),
-    FAILED_SFTP_CONNECT(HttpStatus.INTERNAL_SERVER_ERROR, "SFTP 서버 연결에 실패했습니다.");
+    FAILED_SFTP_CONNECT(HttpStatus.INTERNAL_SERVER_ERROR, "SFTP 서버 연결에 실패했습니다."),
+
+    INVALID_STATUS(HttpStatus.BAD_REQUEST, "주문 status 형식이 맞지 않습니다."),
+    INVALID_PRICE(HttpStatus.BAD_REQUEST, "가격 형식이 맞지 않습니다."),
+
+    NOTFOUND_LAST_SHIPMENT_ID(HttpStatus.NOT_FOUND, "운송회사 테이블의 마지막 기본 키 조회에 실패했습니다.");
+
 
     private final HttpStatus status;
     private final String message;

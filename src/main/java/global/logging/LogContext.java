@@ -2,17 +2,17 @@ package main.java.global.logging;
 
 public class LogContext {
 
-    private final ThreadLocal<Integer> depthHolder = ThreadLocal.withInitial(() -> 0);
+    private static final ThreadLocal<Integer> depthHolder = ThreadLocal.withInitial(() -> 0);
 
-    public void increment() {
+    public static void increment() {
         depthHolder.set(depthHolder.get() + 1);
     }
 
-    public void decrement() {
+    public static void decrement() {
         depthHolder.set(depthHolder.get() - 1);
     }
 
-    public String getIndent() {
+    public static String getIndent() {
         int depth = depthHolder.get();
         if (depth <= 0) {
             return "";

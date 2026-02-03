@@ -11,13 +11,13 @@ import main.java.global.logging.LogContext;
 import main.java.global.logging.annotation.LogExecution;
 import main.java.order.dto.request.OrderRequest;
 import main.java.order.dto.request.OrderRequest.Header;
+import main.java.order.dto.request.OrderRequest.Item;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @AllArgsConstructor
 public class OrderMapper {
 
-    private final LogContext logContext;
     private static final Logger log = LoggerFactory.getLogger(OrderMapper.class);
 
     public String listToFlatFormat(List<OrderDto> orderDtos, String applicationKey) {
@@ -50,13 +50,15 @@ public class OrderMapper {
                 .filter(item -> {
                     boolean exists = headerMap.containsKey(item.getUserId());
                     if (!exists) {
-                        log.warn("{} [SKIP] 주문자를 찾을 수 없습니다. {}의 {} 스킵",
-                                logContext.getIndent(), item.getUserId(), item.getItemId());
+                        log.warn("{} [WARM] 존재하지 않는 주문자, {}의 {} 스킵",
+                                LogContext.getIndent(), item.getUserId(), item.getItemId());
                     }
                     return exists;
                 })
                 .map(item -> {
                     Header header = headerMap.get(item.getUserId());
+                    validateItem(header, item);
+
                     return new OrderDto(
                             null,
                             item.getUserId(),
@@ -69,5 +71,19 @@ public class OrderMapper {
                     );
                 })
                 .collect(Collectors.toList());
+    }
+
+    private void validateItem(Header header, Item item) {
+        if (!header.getStatus().equals(OrderStatus.N.name())) {
+            throw new RestApiException(OrderErrorCode.INVALID_STATUS);
+        }
+        try {
+            int price = Integer.parseInt(item.getPrice());
+            if (price <= 0) {
+                throw new RestApiException(OrderErrorCode.INVALID_PRICE);
+            }
+        } catch (NumberFormatException e) {
+            throw new RestApiException(OrderErrorCode.INVALID_PRICE);
+        }
     }
 }

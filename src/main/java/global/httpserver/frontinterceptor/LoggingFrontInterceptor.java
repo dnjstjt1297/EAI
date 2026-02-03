@@ -8,14 +8,18 @@ import org.slf4j.LoggerFactory;
 public class LoggingFrontInterceptor implements FrontInterceptor {
 
     private final static Logger log = LoggerFactory.getLogger(LoggingFrontInterceptor.class);
+    private final static String HEADER_CONNECTION = "Connection";
+
 
     private Long startTime;
 
     @Override
     public boolean preHandle(HttpRequest request, HttpResponse response, Object object)
             throws Exception {
-        startTime = System.currentTimeMillis();
-        log.info("[REQ] {} {}", request.method(), request.path());
+        startTime = System.nanoTime();
+        String contentType = request.headers().getOrDefault(HEADER_CONNECTION.toLowerCase(), "");
+        log.info("[INFO] REQUEST: {} {} , H-Connection: {}", request.method(), request.path(),
+                contentType);
         return true;
     }
 
@@ -27,7 +31,7 @@ public class LoggingFrontInterceptor implements FrontInterceptor {
     @Override
     public void afterCompletion(HttpRequest request, HttpResponse response, Object object,
             Exception ex) throws Exception {
-        Long duration = (startTime != null) ? System.currentTimeMillis() - startTime : 0;
-        log.info("[RES] {} | Time: {}ms", request.path(), duration);
+        Long duration = (startTime != null) ? System.nanoTime() - startTime : 0;
+        log.info("[INFO] RESPONSE: {} | Time: {}ms", request.path(), duration);
     }
 }

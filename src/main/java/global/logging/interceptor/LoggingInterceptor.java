@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 public class LoggingInterceptor implements MethodInterceptor, ProxyWrapper {
 
     private final Object target;
-    private final LogContext logContext;
     private static final Logger log = LoggerFactory.getLogger(LoggingInterceptor.class);
 
     @Override
@@ -24,33 +23,34 @@ public class LoggingInterceptor implements MethodInterceptor, ProxyWrapper {
         if (method.isAnnotationPresent(LogExecution.class)) {
             LogExecution logExecution = method.getAnnotation(LogExecution.class);
 
-            String indent = logContext.getIndent();
+            String indent = LogContext.getIndent();
             String className = target.getClass().getSimpleName();
 
-            log.info("{}[START] {}.{}()", indent, className, method.getName());
+            log.info("{}[INFO] START: {}.{}()", indent, className, method.getName());
 
-            logContext.increment();
+            LogContext.increment();
 
-            long startTime = System.currentTimeMillis();
+            long startTime = System.nanoTime();
             try {
 
                 Object result = method.invoke(target, args);
-                logContext.decrement();
+                LogContext.decrement();
 
-                log.info("{}[END] {}.{}() , Duration: {}ms", indent, className,
-                        method.getName(), System.currentTimeMillis() - startTime);
+                log.info("{}[INFO] END: {}.{}() , Duration: {}ms", indent, className,
+                        method.getName(), System.nanoTime() - startTime);
                 return result;
             } catch (Exception e) {
 
                 Exception exception = e;
+
                 while (exception instanceof InvocationTargetException ite) {
                     exception = (Exception) ite.getTargetException();
                 }
 
-                logContext.decrement();
-                log.error("{}[ERROR] {}.{}() , Exception: {} , Duration: {}ms",
+                LogContext.decrement();
+                log.error("{}[ERROR] END: {}.{}() , Exception: {} , Duration: {}ms",
                         indent, className, method.getName(), exception.getMessage(),
-                        System.currentTimeMillis() - startTime);
+                        System.nanoTime() - startTime);
                 throw exception;
             }
         }

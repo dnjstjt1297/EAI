@@ -16,6 +16,7 @@ import main.java.global.httpserver.dto.request.HttpRequest;
 import main.java.global.httpserver.dto.response.HttpResponse;
 import main.java.global.httpserver.parser.HttpRequestParser;
 import main.java.global.httpserver.sender.HttpResponseSender;
+import main.java.global.logging.LogContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -40,11 +41,20 @@ public class Http11Connection implements HttpConnection {
     private final RestApiExceptionHandler restApiExceptionHandler;
     private static final Logger log = LoggerFactory.getLogger(Http11Connection.class);
 
+
     @Override
     public void start() {
-        ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        ExecutorService threadPool = null;
 
-        log.info("[HTTPSERVER] HTTP 1.1 Server is running on port {} ...", PORT);
+        try {
+            threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        } catch (Exception e) {
+            log.error("{}[FATAL] Failed to create thread pool (no system resources)",
+                    LogContext.getIndent());
+            System.exit(1);
+        }
+
+        log.info("[INFO] Running HTTP 1.1 server on port {}", PORT);
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             while (true) {
@@ -53,19 +63,20 @@ public class Http11Connection implements HttpConnection {
                     threadPool.execute(() -> handleRequest(clientSocket));
 
                 } catch (IOException e) {
-                    log.error("[HTTPSERVER] Socket accept error", e);
+                    log.error("{}[ERROR] Client socket connection failure", LogContext.getIndent());
                 }
             }
 
         } catch (IOException e) {
-            log.error("[HTTPSERVER] ServerSocket error", e);
-            throw new RuntimeException(e);
+            log.error("{}[FATAL] Server socket connection error", LogContext.getIndent());
+            threadPool.shutdown();
+            System.exit(1);
         } finally {
             threadPool.shutdown();
         }
     }
 
-    public void handleRequest(Socket clientSocket) {
+    public void handleRequest(Socket clientSocket) throws RuntimeException {
         checkSocketTimeout(clientSocket);
 
         try (clientSocket; InputStream in = clientSocket.getInputStream();
@@ -78,42 +89,44 @@ public class Http11Connection implements HttpConnection {
                 try {
                     HttpRequest request = httpRequestParser.parse(in);
                     if (request == null) {
-                        log.info("[HTTPSERVER] Connection closed by client (EOF)");
+                        log.info("{}[INFO] Connection terminated by client (EOF)",
+                                LogContext.getIndent());
                         break;
                     }
 
                     frontController.doDispatch(request, out);
                     String connHeader = request.headers().get(HEADER_CONNECTION.toLowerCase());
                     if (CLOSE.equalsIgnoreCase(connHeader)) {
-                        log.info("[HTTPSERVER] Connection close header detected. Closing...");
+                        log.info("{}[INFO] Connection: Close found", LogContext.getIndent());
                         break;
                     }
 
                 } catch (Exception e) {
-                    log.error("[HTTPSERVER] Error processing request", e);
+                    log.error("{}[ERROR] Http Request error", LogContext.getIndent(), e);
                     sendErrorCodeResponse(out, e);
                     break;
                 } finally {
-                    log.info("[HTTPSERVER] Request finished.");
+                    log.info("{}[INFO] Completed Http Request", LogContext.getIndent());
                     MDC.clear();
                 }
             }
 
         } catch (Exception e) {
-            log.error("[HTTPSERVER] Connection handler error", e);
+            log.error("{}[ERROR] Connection handling error", LogContext.getIndent(), e);
+            throw new RuntimeException(e);
         }
     }
 
     private void checkSocketTimeout(Socket socket) {
         try {
             socket.setSoTimeout(TIMEOUT);
-            log.info("[HTTPSERVER] Socket timeout set to {}ms", TIMEOUT);
+            log.info("{}[INFO] Socket Timeout {}ms", LogContext.getIndent(), TIMEOUT);
         } catch (IOException e) {
             try {
-                log.error("[HTTPSERVER] Socket timeout error", e);
+                log.error("{}[ERROR] Socket timeout error", LogContext.getIndent(), e);
                 socket.close();
             } catch (IOException ex) {
-                log.error("[HTTPSERVER] Socket close error", e);
+                log.error("{}[ERROR] Socket close error", LogContext.getIndent(), e);
             }
         }
     }
@@ -122,7 +135,7 @@ public class Http11Connection implements HttpConnection {
         ErrorCodeDto errorCodeDto = restApiExceptionHandler.handle(e);
         HttpResponse httpResponse = new HttpResponse(errorCodeDto.status(),
                 errorCodeDto.message());
-        httpResponseSender.sendError(out, httpResponse);
+        httpResponseSender.send(out, null, httpResponse);
     }
 
 }

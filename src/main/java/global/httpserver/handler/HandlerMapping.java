@@ -8,11 +8,14 @@ import main.java.global.httpserver.dto.MappingInfo;
 import main.java.global.httpserver.enums.HttpMethod;
 import main.java.global.proxy.ProxyWrapper;
 import net.sf.cglib.proxy.Factory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @AllArgsConstructor
 public class HandlerMapping {
 
     private final ContainerService containerService;
+    private static Logger log = LoggerFactory.getLogger(HandlerMapping.class);
 
     public void init() {
         Map<MappingInfo, HandlerMethod> handlerMap = containerService.getHandlerMap();
@@ -31,7 +34,8 @@ public class HandlerMapping {
                         MappingInfo mappingInfo = new MappingInfo(path, type);
 
                         if (handlerMap.containsKey(mappingInfo)) {
-                            throw new IllegalStateException("중복된 경로 발견");
+                            log.error("[ERROR] Duplicated path:{}", mappingInfo.path());
+                            throw new IllegalStateException("Duplicated path");
                         }
 
                         handlerMap.put(mappingInfo, new HandlerMethod(bean, method));
