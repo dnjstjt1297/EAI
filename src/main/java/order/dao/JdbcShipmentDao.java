@@ -49,7 +49,7 @@ public class JdbcShipmentDao implements ShipmentDao {
 
     @Override
     public String findLastShipmentId(String applicantKey) {
-        String sql = "SELECT SHIPMENT_ID FROM SHIPMENT_TB WHERE APPLICANT_KEY = ? ORDER BY SHIPMENT_ID DESC LIMIT 1";
+        String sql = "SELECT SHIPMENT_ID FROM SHIPMENT_TB WHERE APPLICANT_KEY = ? ORDER BY SHIPMENT_ID DESC FETCH FIRST 1 ROWS ONLY";
 
         Connection connection = connectionHolder.getConnection();
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
