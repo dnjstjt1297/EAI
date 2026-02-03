@@ -66,7 +66,7 @@ public class JdbcOrderDao implements OrderDao {
     @LogExecution
     public String findLastOrderId(String applicantKey) {
 
-        String sql = "SELECT ORDER_ID FROM ORDER_TB WHERE APPLICANT_KEY = ? ORDER BY ORDER_ID DESC LIMIT 1";
+        String sql = "SELECT ORDER_ID FROM ORDER_TB WHERE APPLICANT_KEY = ? ORDER BY ORDER_ID DESC FETCH FIRST 1 ROWS ONLY";
 
         Connection connection = connectionHolder.getConnection();
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {

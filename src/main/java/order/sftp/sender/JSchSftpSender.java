@@ -21,7 +21,7 @@ import main.java.order.sftp.client.SftpClient;
 @AllArgsConstructor
 public class JSchSftpSender implements SftpSender {
 
-    private static final String FILE_NAME = "INSPIEN_김원석_%s.txt";
+    private static final String FILE_NAME = "INSPIEN_[김원석]_[%s].txt";
     private static final String DATE_FORMAT = "yyyyMMddHHmmss";
 
     private final SftpClient sftpClient;

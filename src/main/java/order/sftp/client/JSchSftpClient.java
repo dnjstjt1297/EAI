@@ -13,8 +13,6 @@ import main.java.global.logging.annotation.LogExecution;
 
 public class JSchSftpClient implements SftpClient {
 
-    private static final String CONFIG_KEY = "StrictHostKeyChecking";
-    private static final String CONFIG_VALUE = "no";
     private static final String CHANNEL_TYPE = "sftp";
 
     private Session session;
@@ -27,7 +25,9 @@ public class JSchSftpClient implements SftpClient {
         try {
             session = jsch.getSession(username, host, port);
             session.setPassword(password);
-            session.setConfig(CONFIG_KEY, CONFIG_VALUE);
+            session.setConfig("StrictHostKeyChecking", "no");
+            session.setConfig("server_host_key", "ssh-rsa,ssh-dss");
+            session.setConfig("PubkeyAcceptedAlgorithms", "ssh-rsa");
             session.connect();
 
             channel = session.openChannel(CHANNEL_TYPE);
