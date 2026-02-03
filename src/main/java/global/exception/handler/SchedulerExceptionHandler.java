@@ -20,11 +20,12 @@ public class SchedulerExceptionHandler {
         }
 
         if (e instanceof RuntimeException && e.getCause() instanceof SQLException) {
-            log.error("[ERROR] Scheduler system failure | Job: {}.{} | Cause: DB 연결 불가",
-                    groupName, jobName);
+            log.error(
+                    "[ERROR] Scheduler system failure , Job: {}.{} \n",
+                    groupName, jobName, e);
         } else {
-            log.warn("[WARM] Scheduler system failure | Job: {} | message: {}",
-                    jobName, e.getMessage());
+            log.warn("[WARM] Scheduler system failure , Job: {} , message: {}", jobName,
+                    e.getMessage());
         }
     }
 }
