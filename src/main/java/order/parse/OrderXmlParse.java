@@ -24,16 +24,13 @@ public class OrderXmlParse {
             Unmarshaller unmarshaller = context.createUnmarshaller();
             return (OrderRequest) unmarshaller.unmarshal(new StringReader(xml));
         } catch (UnmarshalException e) {
-            // xml 형식 오류
             throw new RestApiException(OrderErrorCode.INVALID_XML);
 
         } catch (JAXBException e) {
             if (e.getCause() instanceof SAXParseException) {
-                // xml 문법 오류
                 throw new RestApiException(OrderErrorCode.INVALID_XML);
 
             }
-            // 그 외 오류
             throw new RestApiException(OrderErrorCode.FAILED_PARSE_XML);
         }
     }
